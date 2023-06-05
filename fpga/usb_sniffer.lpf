@@ -1,0 +1,88 @@
+BLOCK RESETPATHS;
+BLOCK ASYNCPATHS;
+
+SYSCONFIG JTAG_PORT=DISABLE;
+SYSCONFIG MUX_CONFIGURATION_PORTS=ENABLE;
+
+BANK 0 VCCIO 3.3 V;
+BANK 1 VCCIO 3.3 V;
+BANK 2 VCCIO 3.3 V;
+BANK 3 VCCIO 3.3 V;
+BANK 4 VCCIO 3.3 V;
+BANK 5 VCCIO 3.3 V;
+
+TRACEID "01010111";
+
+IOBUF ALLPORTS IO_TYPE=LVCMOS33 SLEWRATE=FAST;
+
+LOCATE COMP "t_usb_clk_i" SITE "20";
+IOBUF  PORT "t_usb_clk_i" IO_TYPE=LVCMOS33 PULLMODE=NONE;
+LOCATE COMP "t_usb_stp_o" SITE "24";
+LOCATE COMP "t_usb_dir_i" SITE "21";
+LOCATE COMP "t_usb_nxt_i" SITE "19";
+LOCATE COMP "t_usb_d_io[0]" SITE "18";
+LOCATE COMP "t_usb_d_io[1]" SITE "17";
+LOCATE COMP "t_usb_d_io[2]" SITE "16";
+LOCATE COMP "t_usb_d_io[3]" SITE "15";
+LOCATE COMP "t_usb_d_io[4]" SITE "13";
+LOCATE COMP "t_usb_d_io[5]" SITE "10";
+LOCATE COMP "t_usb_d_io[6]" SITE "9";
+LOCATE COMP "t_usb_d_io[7]" SITE "8";
+
+LOCATE COMP "cmp_dm_i[0]" SITE "96";
+LOCATE COMP "cmp_dm_i[1]" SITE "97";
+LOCATE COMP "cmp_dm_i[2]" SITE "98";
+LOCATE COMP "cmp_dp_i[0]" SITE "3";
+LOCATE COMP "cmp_dp_i[1]" SITE "2";
+LOCATE COMP "cmp_dp_i[2]" SITE "1";
+
+LOCATE COMP "ifclk_i" SITE "88";
+LOCATE COMP "slrd_o" SITE "48";
+LOCATE COMP "slwr_o" SITE "49";
+LOCATE COMP "sloe_o" SITE "69";
+LOCATE COMP "pktend_o" SITE "64";
+LOCATE COMP "flaga_i" SITE "78";
+LOCATE COMP "flagb_i" SITE "75";
+LOCATE COMP "flagc_i" SITE "74";
+LOCATE COMP "fifoaddr_o[0]" SITE "67";
+LOCATE COMP "fifoaddr_o[1]" SITE "65";
+LOCATE COMP "fd_o[0]" SITE "90";
+LOCATE COMP "fd_o[1]" SITE "91";
+LOCATE COMP "fd_o[2]" SITE "94";
+LOCATE COMP "fd_o[3]" SITE "95";
+LOCATE COMP "fd_o[4]" SITE "87";
+LOCATE COMP "fd_o[5]" SITE "86";
+LOCATE COMP "fd_o[6]" SITE "85";
+LOCATE COMP "fd_o[7]" SITE "84";
+LOCATE COMP "fd_o[8]" SITE "57";
+LOCATE COMP "fd_o[9]" SITE "54";
+LOCATE COMP "fd_o[10]" SITE "53";
+LOCATE COMP "fd_o[11]" SITE "52";
+LOCATE COMP "fd_o[12]" SITE "51";
+LOCATE COMP "fd_o[13]" SITE "43";
+LOCATE COMP "fd_o[14]" SITE "45";
+LOCATE COMP "fd_o[15]" SITE "47";
+
+LOCATE COMP "ctrl_clk_i" SITE "71";
+LOCATE COMP "ctrl_data_i" SITE "68";
+
+LOCATE COMP "trigger_i" SITE "41";
+IOBUF  PORT "trigger_i" IO_TYPE=LVCMOS33 PULLMODE=UP;
+
+LOCATE COMP "jtagen_i" SITE "70";
+
+LOCATE COMP "dbg_o[0]" SITE "32";
+LOCATE COMP "dbg_o[1]" SITE "31";
+LOCATE COMP "dbg_o[2]" SITE "30";
+LOCATE COMP "dbg_o[3]" SITE "29";
+
+LOCATE COMP "spare_o[0]" SITE "34";
+LOCATE COMP "spare_o[1]" SITE "35";
+LOCATE COMP "spare_o[2]" SITE "36";
+LOCATE COMP "spare_o[3]" SITE "37";
+LOCATE COMP "spare_o[4]" SITE "38";
+LOCATE COMP "spare_o[5]" SITE "39";
+LOCATE COMP "spare_o[6]" SITE "40";
+
+FREQUENCY PORT "t_usb_clk_i" 60.0 MHz;
+FREQUENCY PORT "ifclk_i" 30.0 MHz;
