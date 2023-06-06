@@ -77,18 +77,28 @@ void log_print(char *fmt, ...)
 }
 
 //-----------------------------------------------------------------------------
+u8 *find_str(u8 *buf, int size, char *str)
+{
+  int len = strlen(str);
+
+  if (size == 0 || len ==0 || size < len)
+    return NULL;
+
+  for (int i = 0; i < (size - len); i++)
+  {
+    if (memcmp(buf + i, str, len) == 0)
+      return buf + i;
+  }
+
+  return NULL;
+}
+
+//-----------------------------------------------------------------------------
 static void print_help(const char *name, const OsOption *options)
 {
   printf("USB Sniffer, built " __DATE__ " " __TIME__ "\n\n");
   printf("Usage: %s [options]\n", name);
   os_opt_print_help(options);
-  printf("\n");
-  printf("PID list is a comma-separated list consisting of:\n");
-  printf("  sof, in, out, setup, ping, ack, nak, nyet, stall,\n");
-  printf("  data0, data1, data2, mdata, split, pre/err, reserved, all\n");
-  printf("\n");
-  printf("All PIDs are enabled by default. Disable list is applied first,\n");
-  printf("followed by the enable list.\n");
   printf("\n");
 
   exit(0);
@@ -176,10 +186,10 @@ static void mcu_eeprom(const char *name)
 
   size = os_file_read_all(name, &data);
 
-  sn = memmem(data, size, "[-----SN-----]", strlen("[-----SN-----]"));
+  sn = find_str(data, size, "[-----SN-----]");
   os_check(sn, "provided binary does not include a placeholder for the serial number");
 
-  sprintf((char *)sn, "%014lx", traceid);
+  sprintf((char *)sn, "%014"PRIx64, traceid);
 
   printf("Programming %d bytes into the FX2LP EEPROM (SN: %s)\n", size, sn);
   fx2lp_eeprom_upload(data, size);

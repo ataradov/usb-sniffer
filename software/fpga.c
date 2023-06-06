@@ -3,6 +3,7 @@
 
 /*- Includes ----------------------------------------------------------------*/
 #include "os_common.h"
+#include "usb_sniffer.h"
 #include "usb.h"
 #include "fpga.h"
 
@@ -204,7 +205,7 @@ static bool bitstream_valid(u8 *data, int size)
   if (size < 1024)
     return false;
 
-  if (NULL == memmem(data, 1024, BITSTREAM_SIGNATURE, strlen(BITSTREAM_SIGNATURE)))
+  if (NULL == find_str(data, 1024, BITSTREAM_SIGNATURE))
     return false;
 
   return true;
@@ -253,8 +254,8 @@ void fpga_program_sram(u8 *data, int size)
 //-----------------------------------------------------------------------------
 static int parse_jed_file(u8 *data, int size, u8 *config, u16 *feabits, u64 *feature)
 {
-  static const char *start_text = "L000000";
-  static const char *fr_text = "NOTE FEATURE_ROW*";
+  static char *start_text = "L000000";
+  static char *fr_text = "NOTE FEATURE_ROW*";
   u8  *ptr;
   int bit_count = 0;
   int fr_bit_count = 0;
@@ -266,7 +267,7 @@ static int parse_jed_file(u8 *data, int size, u8 *config, u16 *feabits, u64 *fea
   if (!bitstream_valid(data, size))
     os_error("malformed JED file: device signature not found");
 
-  ptr = memmem(data, size, start_text, strlen(start_text));
+  ptr = find_str(data, size, start_text);
 
   if (NULL == ptr)
     os_error("malformed JED file: no 'L000000' found");
@@ -294,7 +295,7 @@ static int parse_jed_file(u8 *data, int size, u8 *config, u16 *feabits, u64 *fea
   if (bit_count % FLASH_ROW_SIZE)
     os_error("malformed JED file: size of the configuration data must be a multiple of 128");
 
-  ptr = memmem(data, size, fr_text, strlen(fr_text));
+  ptr = find_str(data, size, fr_text);
 
   if (NULL == ptr)
     os_error("malformed JED file: no feature row found");

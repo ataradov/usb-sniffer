@@ -5,7 +5,6 @@
 #define _OS_COMMON_H_
 
 /*- Includes ----------------------------------------------------------------*/
-#include <err.h>
 #include <time.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -19,6 +18,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <inttypes.h>
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <sys/types.h>

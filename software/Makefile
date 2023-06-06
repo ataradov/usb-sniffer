@@ -3,8 +3,6 @@ CFLAGS += -fno-diagnostics-show-caret
 CFLAGS += -D_GNU_SOURCE
 CFLAGS += `pkg-config --cflags libusb-1.0`
 
-LDFLAGS += `pkg-config --libs libusb-1.0`
-
 SRCS = \
   usb.c \
   fpga.c \
@@ -27,11 +25,15 @@ ifeq ($(UNAME), Linux)
   BIN = usb_sniffer
   CFLAGS += -DOS_LINUX
   LDFLAGS += -lm -lrt
+  LDFLAGS += `pkg-config --libs libusb-1.0`
   EXTCAP_PATH = ~/.config/wireshark/extcap
 else
   BIN = usb_sniffer.exe
   CFLAGS += -DOS_WINDOWS
   LDFLAGS += -Wl,--subsystem,console
+  LIB_PATH = `pkg-config --variable=libdir libusb-1.0`
+  LDFLAGS += $(LIB_PATH)/libusb-1.0.a
+  LDFLAGS += $(LIB_PATH)/libwinpthread.a
   EXTCAP_PATH = $(APPDATA)/Wireshark/extcap/
 endif
 

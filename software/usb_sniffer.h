@@ -44,6 +44,7 @@ extern Options g_opt;
 
 /*- Prototypes --------------------------------------------------------------*/
 void log_print(char *fmt, ...);
+u8 *find_str(u8 *buf, int size, char *str);
 void open_capture_device(void);
 
 #endif // _USB_SNIFFER_H_
