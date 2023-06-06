@@ -4,6 +4,9 @@
 #ifndef _USB_H_
 #define _USB_H_
 
+// WinUSB device information is stored in the Windows registry at:
+// HKEY_LOCAL_MACHINE\System\CurrentControlSet\Enum\USB\<Device>\<Instance>\Device Parameters
+
 /*- Includes ----------------------------------------------------------------*/
 #include <stdint.h>
 #include <stdbool.h>
@@ -105,6 +108,60 @@ enum
 
 enum
 {
+  USB_DEVICE_CAPABILITY_WIRELESS_USB               = 1,
+  USB_DEVICE_CAPABILITY_USB_2_0_EXTENSION          = 2,
+  USB_DEVICE_CAPABILITY_SUPERSPEED_USB             = 3,
+  USB_DEVICE_CAPABILITY_CONTAINER_ID               = 4,
+  USB_DEVICE_CAPABILITY_PLATFORM                   = 5,
+  USB_DEVICE_CAPABILITY_POWER_DELIVERY             = 6,
+  USB_DEVICE_CAPABILITY_BATTERY_INFO               = 7,
+  USB_DEVICE_CAPABILITY_PD_CONSUMER_PORT           = 8,
+  USB_DEVICE_CAPABILITY_PD_PROVIDER_PORT           = 9,
+  USB_DEVICE_CAPABILITY_SUPERSPEED_PLUS            = 10,
+  USB_DEVICE_CAPABILITY_PRECISION_TIME_MEASUREMENT = 11,
+  USB_DEVICE_CAPABILITY_WIRELESS_USB_EXT           = 12,
+};
+
+#define USB_WINUSB_VENDOR_CODE     0x20
+
+#define USB_WINUSB_WINDOWS_VERSION 0x06030000 // Windows 8.1
+
+#define USB_WINUSB_PLATFORM_CAPABILITY_ID \
+    { 0xdf, 0x60, 0xdd, 0xd8, 0x89, 0x45, 0xc7, 0x4c, \
+      0x9c, 0xd2, 0x65, 0x9d, 0x9e, 0x64, 0x8a, 0x9f }
+
+enum // WinUSB Microsoft OS 2.0 descriptor request codes
+{
+  USB_WINUSB_DESCRIPTOR_INDEX    = 0x07,
+  USB_WINUSB_SET_ALT_ENUMERATION = 0x08,
+};
+
+enum // wDescriptorType
+{
+  USB_WINUSB_SET_HEADER_DESCRIPTOR       = 0x00,
+  USB_WINUSB_SUBSET_HEADER_CONFIGURATION = 0x01,
+  USB_WINUSB_SUBSET_HEADER_FUNCTION      = 0x02,
+  USB_WINUSB_FEATURE_COMPATBLE_ID        = 0x03,
+  USB_WINUSB_FEATURE_REG_PROPERTY        = 0x04,
+  USB_WINUSB_FEATURE_MIN_RESUME_TIME     = 0x05,
+  USB_WINUSB_FEATURE_MODEL_ID            = 0x06,
+  USB_WINUSB_FEATURE_CCGP_DEVICE         = 0x07,
+  USB_WINUSB_FEATURE_VENDOR_REVISION     = 0x08,
+};
+
+enum // wPropertyDataType
+{
+  USB_WINUSB_PROPERTY_DATA_TYPE_SZ                  = 1,
+  USB_WINUSB_PROPERTY_DATA_TYPE_EXPAND_SZ           = 2,
+  USB_WINUSB_PROPERTY_DATA_TYPE_BINARY              = 3,
+  USB_WINUSB_PROPERTY_DATA_TYPE_DWORD_LITTLE_ENDIAN = 4,
+  USB_WINUSB_PROPERTY_DATA_TYPE_DWORD_BIG_ENDIAN    = 5,
+  USB_WINUSB_PROPERTY_DATA_TYPE_LINK                = 6,
+  USB_WINUSB_PROPERTY_DATA_TYPE_MULTI_SZ            = 7,
+};
+
+enum
+{
   USB_HID_DESCRIPTOR          = 0x21,
   USB_HID_REPORT_DESCRIPTOR   = 0x22,
   USB_HID_PHYSICAL_DESCRIPTOR = 0x23,
@@ -197,6 +254,63 @@ typedef struct
   uint8_t   bDescriptorType1;
   uint16_t  wDescriptorLength;
 } usb_hid_descriptor_t;
+
+typedef struct
+{
+  uint8_t   bLength;
+  uint8_t   bDescriptorType;
+  uint16_t  wTotalLength;
+  uint8_t   bNumDeviceCaps;
+} usb_binary_object_store_descriptor_t;
+
+typedef struct
+{
+  uint8_t   bLength;
+  uint8_t   bDescriptorType;
+  uint8_t   bDevCapabilityType;
+  uint8_t   bReserved;
+  uint8_t   PlatformCapabilityUUID[16];
+  uint32_t  dwWindowsVersion;
+  uint16_t  wMSOSDescriptorSetTotalLength;
+  uint8_t   bMS_VendorCode;
+  uint8_t   bAltEnumCode;
+} usb_winusb_capability_descriptor_t;
+
+typedef struct
+{
+  uint16_t  wLength;
+  uint16_t  wDescriptorType;
+  uint32_t  dwWindowsVersion;
+  uint16_t  wDescriptorSetTotalLength;
+} usb_winusb_set_header_descriptor_t;
+
+typedef struct
+{
+  uint16_t  wLength;
+  uint16_t  wDescriptorType;
+  uint8_t   bFirstInterface;
+  uint8_t   bReserved;
+  uint16_t  wSubsetLength;
+} usb_winusb_subset_header_function_t;
+
+typedef struct
+{
+  uint16_t  wLength;
+  uint16_t  wDescriptorType;
+  uint8_t   CompatibleID[8];
+  uint8_t   SubCompatibleID[8];
+} usb_winusb_feature_compatble_id_t;
+
+typedef struct
+{
+  uint16_t  wLength;
+  uint16_t  wDescriptorType;
+  uint16_t  wPropertyDataType;
+  uint16_t  wPropertyNameLength;
+  uint8_t   PropertyName[40];
+  uint16_t  wPropertyDataLength;
+  uint8_t   PropertyData[78];
+} usb_winusb_feature_reg_property_guids_t;
 
 #endif // _USB_H_
 

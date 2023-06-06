@@ -17,8 +17,6 @@
 #define	wLengthL       SETUPDAT[6]
 #define	wLengthH       SETUPDAT[7]
 
-#define EP0_SIZE       64
-
 /*- Variables ---------------------------------------------------------------*/
 static uint8_t usb_config = 0;
 static uint8_t usb_interface = 0;
@@ -103,13 +101,21 @@ static void usb_control_send_buf(uint8_t *data, uint8_t size)
   if (size > wLengthL)
     size = wLengthL;
 
-  for (i = 0; i < size; i++)
-    EP0BUF[i] = data[i];
+  while (size)
+  {
+    int sz = (size > USB_CONTROL_EP_SIZE) ? USB_CONTROL_EP_SIZE : size;
 
-  EP0BCL = size;
-  SYNCDELAY;
+    for (i = 0; i < sz; i++)
+      EP0BUF[i] = data[i];
 
-  while (EP0CS & EPCS_BUSY);
+    EP0BCL = sz;
+    SYNCDELAY;
+
+    while (EP0CS & EPCS_BUSY);
+
+    size -= sz;
+    data += sz;
+  }
 }
 
 //-----------------------------------------------------------------------------
@@ -184,8 +190,14 @@ static void usb_handle_standard_request(void)
         usb_control_stall();
       }
     }
+    else if (USB_BINARY_OBJECT_STORE_DESCRIPTOR == type)
+    {
+      usb_control_send_buf((uint8_t *)&usb_bos_hierarchy, sizeof(usb_bos_hierarchy_t));
+    }
     else
+    {
       usb_control_stall();
+    }
   }
 
   else if (USB_CMD(OUT, DEVICE, STANDARD) == bmRequestType && USB_SET_CONFIGURATION == bRequest)
@@ -270,6 +282,18 @@ static void usb_handle_standard_request(void)
     {
       *epcs &= ~EPCS_STALL;
       usb_reset_toggle(wIndexL);
+    }
+    else
+    {
+      usb_control_stall();
+    }
+  }
+
+  else if (USB_CMD(IN, DEVICE, VENDOR) == bmRequestType && USB_WINUSB_VENDOR_CODE == bRequest)
+  {
+    if (USB_WINUSB_DESCRIPTOR_INDEX == wIndexL && 0 == wIndexH)
+    {
+      usb_control_send_buf((uint8_t *)&usb_msos_descriptor_set, sizeof(usb_msos_descriptor_set_t));
     }
     else
     {
