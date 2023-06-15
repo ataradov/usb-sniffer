@@ -47,6 +47,11 @@ using a USB interface.
 When a board with a blank EEPROM is connected, it would enumerate as an unconfigured
 FX2LP device.
 
+Note: on Windows blank FX2LP will enumerate as an unknown USB device. Use supplied
+dummy [INF file](bin/blank_fx2lp.inf) as a driver. It will associate blank FX2LP device
+with a generic WinUSB driver, so it would be recognized by the tools. Once the firmware
+runs, it would supply necessary descripptors automatically.
+
 The first step is to load the firmware into the MCU SRAM:
 ```
 ./usb_sniffer --mcu-sram usb_sniffer.bin
