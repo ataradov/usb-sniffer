@@ -3428,7 +3428,7 @@
     (property "Reference" "R6" (at 41.91 130.048 0)
       (effects (font (size 1.27 1.27)))
     )
-    (property "Value" "512" (at 41.91 132.08 0)
+    (property "Value" "510" (at 41.91 132.08 0)
       (effects (font (size 1.016 1.016)))
     )
     (property "Footprint" "ataradov_smd:0603" (at 41.402 134.62 0)

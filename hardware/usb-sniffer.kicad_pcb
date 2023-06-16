@@ -406,7 +406,7 @@
         (effects (font (size 1 1) (thickness 0.127)))
       (tstamp 39e4aba2-e5c8-4af2-83ed-b875aae7dae8)
     )
-    (fp_text value "512" (at 0 -0.016 180 unlocked) (layer "F.Fab")
+    (fp_text value "510" (at 0 -0.016 180 unlocked) (layer "F.Fab")
         (effects (font (size 0.5 0.5) (thickness 0.05)))
       (tstamp 6f98e4cc-7cf1-483e-82d4-f5e28d9e71b7)
     )
