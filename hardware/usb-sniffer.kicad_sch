@@ -10,48 +10,6 @@
   )
 
   (lib_symbols
-    (symbol "C_1" (pin_numbers hide) (pin_names hide) (in_bom yes) (on_board yes)
-      (property "Reference" "C?" (at 0.635 1.905 0)
-        (effects (font (size 1.27 1.27)) (justify left))
-      )
-      (property "Value" "C_1" (at 0.635 -2.032 0)
-        (effects (font (size 1.27 1.27)) (justify left))
-      )
-      (property "Footprint" "ataradov_smd:0603" (at 3.81 0 90)
-        (effects (font (size 1.27 1.27)) hide)
-      )
-      (property "Datasheet" "" (at 0 0 0)
-        (effects (font (size 1.27 1.27)) hide)
-      )
-      (symbol "C_1_0_1"
-        (polyline
-          (pts
-            (xy -1.905 -0.508)
-            (xy 1.905 -0.508)
-          )
-          (stroke (width 0.5) (type default))
-          (fill (type none))
-        )
-        (polyline
-          (pts
-            (xy -1.905 0.508)
-            (xy 1.905 0.508)
-          )
-          (stroke (width 0.5) (type default))
-          (fill (type none))
-        )
-      )
-      (symbol "C_1_1_1"
-        (pin passive line (at 0 -2.54 90) (length 1.905)
-          (name "1" (effects (font (size 1.27 1.27))))
-          (number "1" (effects (font (size 1.27 1.27))))
-        )
-        (pin passive line (at 0 2.54 270) (length 1.905)
-          (name "2" (effects (font (size 1.27 1.27))))
-          (number "2" (effects (font (size 1.27 1.27))))
-        )
-      )
-    )
     (symbol "PWR_FLAG_1" (power) (pin_numbers hide) (pin_names (offset 0) hide) (in_bom yes) (on_board yes)
       (property "Reference" "#FLG" (at 0 1.905 0)
         (effects (font (size 1.27 1.27)) hide)
@@ -5080,7 +5038,7 @@
     )
   )
 
-  (symbol (lib_name "C_1") (lib_id "ataradov_rlc:C") (at 34.29 179.07 0) (unit 1)
+  (symbol (lib_id "ataradov_rlc:C") (at 34.29 179.07 0) (unit 1)
     (in_bom yes) (on_board yes) (dnp no)
     (uuid e06501c8-2845-4054-9787-05ce88080176)
     (property "Reference" "C9" (at 34.925 177.165 0)
