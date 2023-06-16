@@ -5,7 +5,7 @@
   (paper "USLetter")
 
   (title_block
-    (date "2023-05-06")
+    (date "2023-06-16")
     (rev "6")
   )
 
@@ -1531,7 +1531,6 @@
       )
     )
   )
-
 
   (junction (at 52.07 132.08) (diameter 0) (color 0 0 0 0)
     (uuid 08629feb-a43a-4e9a-8f4f-3a978593d89d)
@@ -3555,7 +3554,7 @@
     (property "Reference" "IC1" (at 146.05 22.86 0)
       (effects (font (size 1.27 1.27)))
     )
-    (property "Value" "LCMXO2-2000HC" (at 146.05 149.86 0)
+    (property "Value" "LCMXO2-2000HC-5TG100" (at 146.05 149.86 0)
       (effects (font (size 1.27 1.27)))
     )
     (property "Footprint" "ataradov_ic:TQFP-100-0.5mm" (at 146.05 152.4 0)

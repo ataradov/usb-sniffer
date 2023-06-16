@@ -5,7 +5,7 @@
   (paper "USLetter")
 
   (title_block
-    (date "2023-05-06")
+    (date "2023-06-16")
     (rev "6")
   )
 
@@ -727,7 +727,6 @@
       )
     )
   )
-
 
   (junction (at 72.39 91.44) (diameter 0) (color 0 0 0 0)
     (uuid 2319a154-126f-420c-b635-4fc8b9e4335a)
@@ -1513,7 +1512,7 @@
     (property "Reference" "IC8" (at 81.28 53.34 0)
       (effects (font (size 1.27 1.27)))
     )
-    (property "Value" "I2C-EEPROM" (at 81.28 68.58 0)
+    (property "Value" "24LC128" (at 81.28 68.58 0)
       (effects (font (size 1.27 1.27)))
     )
     (property "Footprint" "ataradov_ic:SO-8" (at 81.28 71.12 0)

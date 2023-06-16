@@ -24,8 +24,8 @@ Microchip USB3343 USB PHY.
 Prices and availability of ICs vary, but the total BOM should be less than $50.
 
 LCMXO2-2000HC speed grades 5 and 6 were tested and the provided JED file was built
-for the speed grade 5, so it should work for both. Speed grade 4 should work too,
-but they are the least available and the price difference is negligible.
+for the speed grade 5, so it should work for both. Speed grade 4 is too slow and
+does not meet timing requirements.
 
 Caution: Do not buy CY7C68013A from eBay or AliExpress, they all are either fake
 or sketchy in some way. This IC can be quite expensive from regular suppliers,
