@@ -52,6 +52,9 @@ dummy [INF file](bin/blank_fx2lp.inf) as a driver. It will associate blank FX2LP
 with a generic WinUSB driver, so it would be recognized by the tools. Once the firmware
 runs, it would supply necessary descripptors automatically.
 
+Note: on Linux copy [90-usb-sniffer.rules](bin/90-usb-sniffer.rules) to /etc/udev/rules.d
+to set the permissions to access the device under a regular user.
+
 The first step is to load the firmware into the MCU SRAM:
 ```
 ./usb_sniffer --mcu-sram usb_sniffer.bin
