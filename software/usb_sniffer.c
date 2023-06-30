@@ -138,7 +138,7 @@ static void parse_command_line(int argc, char *argv[])
   };
   int last = os_opt_parse(options, argc, argv);
 
-  if (g_opt.help)
+  if (g_opt.help || last == argc)
     print_help(argv[0], options);
 
   os_check(last == argc, "malformed command line, use '-h' for more information");
