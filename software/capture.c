@@ -619,6 +619,49 @@ static void data_event(void)
 }
 
 //-----------------------------------------------------------------------------
+static void desync_error(void)
+{
+  capture_info(capture_ts, "Error: protocol desynchronization, stopping the capture");
+
+  char header[256] = {0};
+
+  for (int i = 0; i < capture_size; i++)
+  {
+    char tmp[16];
+    snprintf(tmp, sizeof(tmp), "%02x ", capture_data[i]);
+    strcat(header, tmp);
+  }
+
+  capture_info(capture_ts, "Packet header: %s", header);
+  exit(0);
+}
+
+//-----------------------------------------------------------------------------
+static void check_header(int toggle, int zero)
+{
+  if (toggle == capture_toggle && 0 == zero)
+    return;
+
+  if (toggle != capture_toggle)
+    capture_info(capture_ts, "Error: received toggle value %d, expected %d", toggle, capture_toggle);
+
+  if (zero)
+    capture_info(capture_ts, "Error: zero bit in the header is not zero");
+
+  desync_error();
+}
+
+//-----------------------------------------------------------------------------
+static void check_data_size(int size)
+{
+  if (DATA_HEADER_SIZE <= size && size <= MAX_DATA_SIZE)
+    return;
+
+  capture_info(capture_ts, "Error: invalid data size (%d)", size);
+  desync_error();
+}
+
+//-----------------------------------------------------------------------------
 static inline void capture_sm(u8 byte)
 {
   if (capture_header && 0 == capture_data_ptr)
@@ -638,8 +681,7 @@ static inline void capture_sm(u8 byte)
     int toggle = (capture_data[0] & HEADER_TOGGLE) ? 1 : 0;
     int zero   = (capture_data[0] & HEADER_ZERO) ? 1 : 0;
 
-    os_check(toggle == capture_toggle, "wrong toggle bit received, possible protocol desynchronization");
-    os_check(zero == 0, "zero bit in the header is not zero, possible protocol desynchronization");
+    check_header(toggle, zero);
 
     if (capture_data[0] & HEADER_TS_OVERFLOW)
       capture_ts_int += 0x100000;
@@ -662,7 +704,8 @@ static inline void capture_sm(u8 byte)
     else // data
     {
       int size = (((int)capture_data[3] & 0x7) << 8) | capture_data[4];
-      os_check(size <= MAX_DATA_SIZE, "maximum data size exceeded, possible protocol desynchronization");
+
+      check_data_size(size);
 
       capture_size       = size - DATA_HEADER_SIZE;
       capture_overflow   = (capture_data[3] & HEADER_OVERFLOW)   ? true : false;
