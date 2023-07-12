@@ -10,6 +10,7 @@ SRCS = \
   capture.c \
   os_common.c \
   usb_sniffer.c \
+  io_fifo.c \
 
 HDRS = \
   usb.h \
@@ -18,6 +19,7 @@ HDRS = \
   capture.h \
   os_common.h \
   usb_sniffer.h \
+  io_fifo.h \
 
 UNAME := $(shell uname)
 
@@ -30,7 +32,7 @@ ifeq ($(UNAME), Linux)
 else
   BIN = usb_sniffer.exe
   CFLAGS += -DOS_WINDOWS
-  LDFLAGS += -Wl,--subsystem,console
+  LDFLAGS += -static -Wl,--subsystem,console
   LIB_PATH = `pkg-config --variable=libdir libusb-1.0`
   LDFLAGS += $(LIB_PATH)/libusb-1.0.a
   LDFLAGS += $(LIB_PATH)/libwinpthread.a

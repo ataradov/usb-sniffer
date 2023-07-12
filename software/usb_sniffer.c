@@ -247,14 +247,15 @@ static void fpga_erase(void)
 static int get_capture_speed(void)
 {
   if (!g_opt.speed)
-    return CaptureSpeed_FS;
+    return CaptureSpeed_Auto;
   else if (0 == strcmp(g_opt.speed, "ls"))
     return CaptureSpeed_LS;
   else if (0 == strcmp(g_opt.speed, "fs"))
     return CaptureSpeed_FS;
   else if (0 == strcmp(g_opt.speed, "hs"))
     return CaptureSpeed_HS;
-
+  else if (0 == strcmp(g_opt.speed, "auto"))
+    return CaptureSpeed_Auto;
   os_error("unrecognized capture speed setting: '%s'", g_opt.speed);
 
   return 0;
