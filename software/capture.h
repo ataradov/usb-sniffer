@@ -22,6 +22,7 @@ enum
   CaptureSpeed_LS    = 0,
   CaptureSpeed_FS    = 1,
   CaptureSpeed_HS    = 2,
+  CaptureSpeed_Auto = 3,
   CaptureSpeed_Reset = 3,
 };
 

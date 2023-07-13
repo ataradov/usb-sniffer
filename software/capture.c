@@ -6,6 +6,8 @@
 #include "usb.h"
 #include "usb_sniffer.h"
 #include "capture.h"
+#include <pthread.h>
+#include "io_fifo.h"
 
 /*- Definitions -------------------------------------------------------------*/
 #define TIME_US                        1000
@@ -98,6 +100,10 @@ static int  capture_fold_buf_ptr = 0;
 static int  capture_fold_count = 0;
 static int  capture_saved_ls   = LS_INVALID;
 static u64  capture_saved_ts   = 0;
+static pthread_t file_writer_thread = 0;
+static void *io_fifo;
+static u8   file_buff[1024 * 4];
+static volatile u32  file_writer_stop = 0;
 
 /*- Prototypes --------------------------------------------------------------*/
 static void line_state_event(void);
@@ -139,8 +145,9 @@ bool capture_extcap_request(void)
   {
     printf("arg {number=0}{call=--speed}{display=Capture Speed}{tooltip=USB capture speed}{type=selector}\n");
     printf("value {arg=0}{value=ls}{display=Low-Speed}{default=false}\n");
-    printf("value {arg=0}{value=fs}{display=Full-Speed}{default=true}\n");
+    printf("value {arg=0}{value=fs}{display=Full-Speed}{default=false}\n");
     printf("value {arg=0}{value=hs}{display=High-Speed}{default=false}\n");
+    printf("value {arg=0}{value=auto}{display=Auto-detect}{default=true}\n");
     printf("arg {number=1}{call=--fold}{display=Fold empty frames}{tooltip=Fold frames that have no data or errors}{type=boolflag}\n");
     printf("arg {number=2}{call=--trigger}{display=Capture Trigger}{tooltip=Condition used to start the capture}{type=selector}\n");
     printf("value {arg=2}{value=disabled}{display=Disabled}{default=true}\n");
@@ -209,8 +216,8 @@ static void send_buffer(void)
   capture_buf[6] = size >> 16;
   capture_buf[7] = size >> 24;
 
-  int res = fwrite(capture_buf, 1, capture_buf_ptr, capture_fd);
-  os_check(capture_buf_ptr == res, "write() error");
+  size_t res = fifo_write(io_fifo, capture_buf, capture_buf_ptr);
+  os_check((size_t)capture_buf_ptr == res, "write() error");
 
   capture_buf_ptr = 0;
 }
@@ -241,6 +248,8 @@ static void write_usb_header(void)
     link_type = LINKTYPE_USB_2_0_FULL_SPEED;
   else if (CaptureSpeed_HS == g_opt.capture_speed)
     link_type = LINKTYPE_USB_2_0_HIGH_SPEED;
+  else if(CaptureSpeed_Auto == g_opt.capture_speed)
+    link_type = LINKTYPE_USB_2_0_FULL_SPEED;
   else
     os_assert(false);
 
@@ -328,7 +337,7 @@ static void capture_info(u64 ts, char *fmt, ...)
 
   write_str(ts, (u8 *)str, len);
 
-  fflush(capture_fd);
+  //fflush(capture_fd);
 }
 
 //-----------------------------------------------------------------------------
@@ -447,7 +456,10 @@ static void status_event(int ls, int vbus, int trigger, int speed)
     if (capture_enabled)
     {
       if (CaptureSpeed_Reset == speed)
+      {
         capture_info(capture_ts, "--- Bus Reset ---");
+        //capture_toggle_happened = 0;
+      }
       else
         capture_info(capture_ts, "Detected speed: %s", str[capture_speed]);
     }
@@ -528,6 +540,9 @@ static void check_capture_limit(void)
   if (g_opt.capture_limit == 0)
   {
     capture_info(capture_ts, "Capture limit reached");
+    file_writer_stop = 1;
+    void *res = 0;
+    pthread_join(file_writer_thread, &res);
     exit(0);
   }
 }
@@ -576,7 +591,7 @@ static void data_event(void)
     stop_folding();
 
   if (capture_overflow)
-    capture_info(capture_ts, "Harware buffer overflow");
+    capture_info(capture_ts, "Hardware buffer overflow");
 
   if (capture_data_error)
     capture_info(capture_ts, "USB PHY error");
@@ -682,6 +697,14 @@ static inline void capture_sm(u8 byte)
     int zero   = (capture_data[0] & HEADER_ZERO) ? 1 : 0;
 
     check_header(toggle, zero);
+    // if (capture_toggle_happened)
+    // {
+    //   if (toggle != capture_toggle)
+    //     capture_info(capture_ts, "wrong toggle bit received, possible protocol desynchronization");
+    // }
+    // else
+    //   capture_toggle_happened = 1;
+    // os_check(zero == 0, "zero bit in the header is not zero, possible protocol desynchronization");
 
     if (capture_data[0] & HEADER_TS_OVERFLOW)
       capture_ts_int += 0x100000;
@@ -731,6 +754,32 @@ void capture_callback(u8 *data, int size)
     capture_sm(data[i]);
 }
 
+void *file_writer(void *__UNUSED_PARAM(arg))
+{
+  int l_file_writer_stop = 0;
+
+  while (1)
+  {
+    l_file_writer_stop |= file_writer_stop;
+    size_t to_read_len = fifo_available_to_read(io_fifo);
+    size_t write_len = os_min(to_read_len, sizeof(file_buff));
+    if ((write_len < sizeof(file_buff)) && !l_file_writer_stop)
+      os_sleep(1);
+    else
+    {
+      write_len = fifo_read(io_fifo, file_buff, write_len);
+      size_t res = fwrite(file_buff, 1, write_len, capture_fd);
+      os_check(write_len == res, "write() error");
+      if (l_file_writer_stop && (to_read_len == write_len))
+      {
+        fflush(capture_fd);
+        break;
+      }
+    }
+  }
+  return 0;
+}
+
 //-----------------------------------------------------------------------------
 bool capture_start(void)
 {
@@ -738,9 +787,12 @@ bool capture_start(void)
     return false;
 
   log_print("Opening file '%s'", g_opt.extcap_fifo);
+  io_fifo = fifo_create();
+  os_check(io_fifo, "could not create fifo buffer");
 
   capture_fd = fopen(g_opt.extcap_fifo, "wb");
-  os_check(capture_fd, "coupd not open FIFO pipe");
+  os_check(capture_fd, "could not open FIFO pipe");
+  os_check(pthread_create(&file_writer_thread, NULL, file_writer, NULL) == 0, "Could not create file writer thread");
 
   log_print("Opening capture device");
 
