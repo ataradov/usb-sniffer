@@ -32,8 +32,15 @@ enum
 #define DATA_ENDPOINT          0x82
 #define DATA_ENDPOINT_SIZE     512
 #define TRANSFER_SIZE          (DATA_ENDPOINT_SIZE * 2000)
-#define TRANSFER_COUNT         4
 #define TRANSFER_TIMEOUT       250 // ms
+
+#if defined(OS_WINDOWS)
+  #define TRANSFER_COUNT       128
+#elif defined(OS_LINUX)
+  #define TRANSFER_COUNT       16
+#else
+  #error "Unknown OS"
+#endif
 
 /*- Variables ---------------------------------------------------------------*/
 static libusb_device_handle *g_usb_handle = NULL;
