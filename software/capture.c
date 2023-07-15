@@ -576,7 +576,7 @@ static void data_event(void)
     stop_folding();
 
   if (capture_overflow)
-    capture_info(capture_ts, "Harware buffer overflow");
+    capture_info(capture_ts, "Hardware buffer overflow");
 
   if (capture_data_error)
     capture_info(capture_ts, "USB PHY error");
@@ -740,7 +740,7 @@ bool capture_start(void)
   log_print("Opening file '%s'", g_opt.extcap_fifo);
 
   capture_fd = fopen(g_opt.extcap_fifo, "wb");
-  os_check(capture_fd, "coupd not open FIFO pipe");
+  os_check(capture_fd, "could not open FIFO pipe");
 
   log_print("Opening capture device");
 
