@@ -5,6 +5,7 @@
 #include <libusb.h>
 #include "os_common.h"
 #include "capture.h"
+#include "usb_sniffer.h"
 #include "usb.h"
 
 /*- Definitions -------------------------------------------------------------*/
@@ -42,6 +43,7 @@ static bool g_speed_test = false;
 static u64 g_speed_test_time;
 static int g_speed_test_size;
 static u64 g_speed_test_count;
+static u64 g_logged_delta = 0;
 
 /*- Implementations ---------------------------------------------------------*/
 
@@ -263,9 +265,6 @@ static void LIBUSB_CALL usb_capture_callback(struct libusb_transfer *transfer)
   else if (LIBUSB_TRANSFER_COMPLETED != transfer->status)
     os_error("usb_capture_callback(): %d\n", transfer->status);
 
-  rc = libusb_submit_transfer(transfer);
-  usb_check_error(rc, "libusb_submit_transfer() in usb_capture_callback()");
-
   if (g_speed_test)
   {
     u16 *data = (u16 *)transfer->buffer;
@@ -293,8 +292,21 @@ static void LIBUSB_CALL usb_capture_callback(struct libusb_transfer *transfer)
   }
   else
   {
+    u64 delta = os_get_time();
+
     capture_callback(transfer->buffer, transfer->actual_length);
+
+    delta = os_get_time() - delta;
+
+    if (delta > g_logged_delta)
+    {
+      g_logged_delta = delta;
+      log_print("Processing time = %d ms (size = %d bytes)", (int)delta, (int)transfer->actual_length);
+    }
   }
+
+  rc = libusb_submit_transfer(transfer);
+  usb_check_error(rc, "libusb_submit_transfer() in usb_capture_callback()");
 }
 
 //-----------------------------------------------------------------------------
