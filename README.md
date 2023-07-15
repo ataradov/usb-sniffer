@@ -90,7 +90,7 @@ the following command:
 You should be getting 40-50 MB/s. If the speed is significantly slower, connect the
 sniffer directly into the root USB port without intermediate hubs.
 
-It is a good idea to run this test after each work session.
+It is a good idea to run this test after significant changes to the hardware setup.
 
 ## Installation
 
@@ -103,7 +103,7 @@ To use with Wireshark, copy the file into the extcap plugin directory:
 
 For Linux, make sure that the binary file has an executable attribute set.
 
-After that, refresh the list of interfaced in Wireshark and you should see
+After that, refresh the list of interfaces in Wireshark and you should see
 "USB Sniffer" as one of the interfaces. Configure capture settings and start/stop
 the capture as with any other interface.
 
