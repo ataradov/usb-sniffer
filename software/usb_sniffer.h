@@ -33,6 +33,7 @@ typedef struct
   char     *fpga_sram;
   char     *fpga_flash;
   char     *fpga_erase;
+  char     *jtag_enable;
 
   int      capture_speed;
   int      capture_trigger;

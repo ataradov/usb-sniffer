@@ -134,6 +134,7 @@ static void parse_command_line(int argc, char *argv[])
     {  0 , "fpga-sram",  "name", &g_opt.fpga_sram,  "upload BIT file into the FPGA SRAM" },
     {  0 , "fpga-flash", "name", &g_opt.fpga_flash, "program JED file into the FPGA flash" },
     {  0 , "fpga-erase", NULL,   &g_opt.fpga_erase, "erase FPGA flash" },
+    {  0 , "jtag-enable", NULL,   &g_opt.jtag_enable, "enable FPGA JTAG" },
     {  0 },
   };
   int last = os_opt_parse(options, argc, argv);
@@ -244,6 +245,17 @@ static void fpga_erase(void)
 }
 
 //-----------------------------------------------------------------------------
+static void jtag_enable(void)
+{
+  printf("Enabling JTAG\n");
+  open_capture_device();
+  usb_jtag_enable(true);
+  printf("... done\n");
+
+  exit(0);
+}
+
+//-----------------------------------------------------------------------------
 static int get_capture_speed(void)
 {
   if (!g_opt.speed)
@@ -331,6 +343,9 @@ int main(int argc, char *argv[])
 
   if (g_opt.fpga_erase)
     fpga_erase();
+
+  if (g_opt.jtag_enable)
+    jtag_enable();
 
   return 0;
 }
