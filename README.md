@@ -95,7 +95,7 @@ It is a good idea to run this test after significant changes to the hardware set
 ## Installation
 
 Pre-built binaries are provided for [Linux](bin/usb_sniffer_linux) and
-[Windows](usb_sniffer_win.exe).
+[Windows](bin/usb_sniffer_win.exe).
 
 To use with Wireshark, copy the file into the extcap plugin directory:
 `~/.config/wireshark/extcap` on Linux, and
