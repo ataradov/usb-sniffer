@@ -103,7 +103,21 @@ To use with Wireshark, copy the file into the extcap plugin directory:
 
 For Linux, make sure that the binary file has an executable attribute set.
 
-After that, refresh the list of interfaces in Wireshark and you should see
-"USB Sniffer" as one of the interfaces. Configure capture settings and start/stop
-the capture as with any other interface.
+## Usage
+
+After installation, refresh the list of interfaces in Wireshark and you should see
+"USB Sniffer" as one of the interfaces:
+
+![Wireshark UI](doc/interfaces.png)
+
+The settings icon next to the interface name (highlighted in red) will bring up
+the settings dialog:
+
+![Wireshark UI](doc/settings.png)
+
+Here you can configure the capture speed, empty frame folding, trigger type and limit
+the number of the captured packets (0 for unlimited).
+
+After interface is configured, start and stop the capture as with any other interface.
+
 
