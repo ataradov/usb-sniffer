@@ -1,7 +1,5 @@
 CFLAGS += -W -Wall --std=gnu11 -O3
-CFLAGS += -fno-diagnostics-show-caret
 CFLAGS += -D_GNU_SOURCE
-CFLAGS += `pkg-config --cflags libusb-1.0`
 
 SRCS = \
   usb.c \
@@ -24,12 +22,22 @@ UNAME := $(shell uname)
 ifeq ($(UNAME), Linux)
   BIN = usb_sniffer
   CFLAGS += -DOS_LINUX
+  CFLAGS += `pkg-config --cflags libusb-1.0`
+  CFLAGS += -fno-diagnostics-show-caret
   LDFLAGS += -lm -lrt
   LDFLAGS += `pkg-config --libs libusb-1.0`
+  EXTCAP_PATH = ~/.config/wireshark/extcap
+else ifeq ($(UNAME), Darwin)
+  BREW_PKGCONFIG := $(shell brew --cellar pkg-config)/$(shell brew list --versions pkg-config | tr ' ' '\n' | tail -1)/bin/pkg-config
+  BIN = usb_sniffer
+  CFLAGS += -DOS_LINUX
+  CFLAGS += `$(BREW_PKGCONFIG) --cflags libusb-1.0`
+  LDFLAGS += `$(BREW_PKGCONFIG) --libs libusb-1.0`
   EXTCAP_PATH = ~/.config/wireshark/extcap
 else
   BIN = usb_sniffer.exe
   CFLAGS += -DOS_WINDOWS
+  CFLAGS += `pkg-config --cflags libusb-1.0`
   LDFLAGS += -Wl,--subsystem,console
   LIB_PATH = `pkg-config --variable=libdir libusb-1.0`
   LDFLAGS += $(LIB_PATH)/libusb-1.0.a
