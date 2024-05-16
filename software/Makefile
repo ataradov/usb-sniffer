@@ -26,14 +26,14 @@ ifeq ($(UNAME), Linux)
   CFLAGS += -fno-diagnostics-show-caret
   LDFLAGS += -lm -lrt
   LDFLAGS += `pkg-config --libs libusb-1.0`
-  EXTCAP_PATH = ~/.config/wireshark/extcap
+  EXTCAP_PATH = ~/.local/lib/wireshark/extcap
 else ifeq ($(UNAME), Darwin)
   BREW_PKGCONFIG := $(shell brew --cellar pkg-config)/$(shell brew list --versions pkg-config | tr ' ' '\n' | tail -1)/bin/pkg-config
   BIN = usb_sniffer
   CFLAGS += -DOS_LINUX
   CFLAGS += `$(BREW_PKGCONFIG) --cflags libusb-1.0`
   LDFLAGS += `$(BREW_PKGCONFIG) --libs libusb-1.0`
-  EXTCAP_PATH = ~/.config/wireshark/extcap
+  EXTCAP_PATH = ~/.local/lib/wireshark/extcap
 else
   BIN = usb_sniffer.exe
   CFLAGS += -DOS_WINDOWS
