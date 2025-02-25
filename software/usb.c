@@ -84,7 +84,7 @@ bool usb_open(int vid, int pid)
 
     rc = libusb_get_device_descriptor(dev, &desc);
     if (rc < 0)
-      continue; // check next device on error
+      continue;
 
     if (desc.idVendor == vid && desc.idProduct == pid)
     {
@@ -92,10 +92,10 @@ bool usb_open(int vid, int pid)
 
       rc = libusb_open(dev, &handle);
       if (rc < 0)
-        continue; // check next device on error
+        continue;
 
       g_usb_handle = handle;
-      break; // only care about the first result
+      break;
     }
   }
 
