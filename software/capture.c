@@ -24,7 +24,7 @@
 #define DATA_HEADER_SIZE               7
 #define STATUS_HEADER_SIZE             4
 #define DATA_BUF_SIZE                  2048
-#define FOLD_BUF_SIZE                  128
+#define FOLD_BUF_SIZE                  256
 #define MAX_DATA_SIZE                  1280
 
 // Byte 0
