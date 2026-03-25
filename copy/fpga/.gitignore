@@ -1,0 +1,12 @@
+impl/
+usb_sniffer_tcr.dir/
+
+.run_manager.ini
+.setting.ini
+.spread_sheet.ini
+.spreadsheet_view.ini
+promote.xml
+hdlparser.log
+reportview.xml
+usb_sniffer_tcl.html
+usb_sniffer.ccl

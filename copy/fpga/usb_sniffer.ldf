@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<BaliProject version="3.2" title="usb_sniffer" device="LCMXO2-2000HC-5TG100C" default_implementation="impl">
+    <Options/>
+    <Implementation title="impl" dir="impl" description="impl" synthesis="lse" default_strategy="Strategy">
+        <Options def_top="usb_sniffer" top="usb_sniffer"/>
+        <Source name="usb_sniffer.v" type="Verilog" type_short="Verilog">
+            <Options top_module="usb_sniffer"/>
+        </Source>
+        <Source name="fifo_sync.v" type="Verilog" type_short="Verilog">
+            <Options/>
+        </Source>
+        <Source name="usb_phy.v" type="Verilog" type_short="Verilog">
+            <Options/>
+        </Source>
+        <Source name="usb_capture.v" type="Verilog" type_short="Verilog">
+            <Options/>
+        </Source>
+        <Source name="ctrl.v" type="Verilog" type_short="Verilog">
+            <Options/>
+        </Source>
+        <Source name="speed_detect.v" type="Verilog" type_short="Verilog">
+            <Options/>
+        </Source>
+        <Source name="usb_sniffer.ldc" type="LSE Design Constraints File" type_short="LDC">
+            <Options/>
+        </Source>
+        <Source name="usb_sniffer.lpf" type="Logic Preference" type_short="LPF">
+            <Options/>
+        </Source>
+    </Implementation>
+    <Strategy name="Strategy" file="usb_sniffer.sty"/>
+</BaliProject>

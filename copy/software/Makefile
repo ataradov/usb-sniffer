@@ -26,6 +26,7 @@ ifeq ($(UNAME), Linux)
   CFLAGS += -fno-diagnostics-show-caret
   LDFLAGS += -lm -lrt
   LDFLAGS += `pkg-config --libs libusb-1.0`
+	MKDIR_CMD = mkdir -p
   EXTCAP_PATH = ~/.local/lib/wireshark/extcap
 else ifeq ($(UNAME), Darwin)
   BREW_PKGCONFIG := $(shell brew --cellar pkg-config)/$(shell brew list --versions pkg-config | tr ' ' '\n' | tail -1)/bin/pkg-config
@@ -33,6 +34,7 @@ else ifeq ($(UNAME), Darwin)
   CFLAGS += -DOS_LINUX
   CFLAGS += `$(BREW_PKGCONFIG) --cflags libusb-1.0`
   LDFLAGS += `$(BREW_PKGCONFIG) --libs libusb-1.0`
+	MKDIR_CMD = mkdir -p
   EXTCAP_PATH = ~/.local/lib/wireshark/extcap
 else
   BIN = usb_sniffer.exe
@@ -42,6 +44,7 @@ else
   LIB_PATH = `pkg-config --variable=libdir libusb-1.0`
   LDFLAGS += $(LIB_PATH)/libusb-1.0.a
   LDFLAGS += $(LIB_PATH)/libwinpthread.a
+	MKDIR_CMD = md
   EXTCAP_PATH = $(APPDATA)/Wireshark/extcap/
 endif
 
@@ -54,6 +57,7 @@ clean:
 	rm -fr $(BIN)
 
 install: $(BIN)
+	$(MKDIR_CMD) $(EXTCAP_PATH)
 	cp $(BIN) $(EXTCAP_PATH)
 
 prog_eeprom:
@@ -64,5 +68,3 @@ prog_sram:
 
 prog_flash:
 	./usb_sniffer --fpga-flash ../fpga/impl/usb_sniffer_impl.jed
-
-

@@ -1,0 +1,5 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "USB_Connectors")(type "KiCad")(uri "/home/jsobota/usb-sniffer/hardware/USB_Connectors.pretty")(options "")(descr ""))
+  (lib (name "Oscilator")(type "KiCad")(uri "${KIPRJMOD}/Oscilator.pretty")(options "")(descr ""))
+)
