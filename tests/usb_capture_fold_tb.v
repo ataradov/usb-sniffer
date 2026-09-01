@@ -14,6 +14,7 @@ module usb_capture_fold_tb;
   integer folded_sof = 0;
   integer folded_nak = 0;
   integer retained_records = 0;
+  integer i;
 
   assign ulpi_data = phy_drive ? phy_data : 8'hzz;
 
@@ -95,10 +96,14 @@ module usb_capture_fold_tb;
     rx_command(2'b00);
     rx_command(2'b00);
 
-    // SOF and an empty IN/NAK transaction must become summary records only.
-    rx_packet3(8'ha5, 8'h93, 8'h00);
-    rx_packet3(8'h69, 8'h52, 8'h39);
-    rx_packet1(8'h5a);
+    // Empty traffic is accumulated so a summary is not emitted for every
+    // individual SOF or IN/NAK transaction.
+    for (i = 0; i < 16; i = i + 1)
+      rx_packet3(8'ha5, 8'h93, 8'h00);
+    for (i = 0; i < 16; i = i + 1) begin
+      rx_packet3(8'h69, 8'h52, 8'h39);
+      rx_packet1(8'h5a);
+    end
 
     // A pending IN followed by anything except NAK must retain both records.
     rx_packet3(8'h69, 8'h52, 8'h39);
@@ -110,10 +115,10 @@ module usb_capture_fold_tb;
 
     if (fold_commits == 0)
       $fatal(1, "Expected at least one fold summary");
-    if (folded_sof !== 1)
-      $fatal(1, "Expected one folded SOF, observed %0d", folded_sof);
-    if (folded_nak !== 1)
-      $fatal(1, "Expected one folded IN/NAK, observed %0d", folded_nak);
+    if (folded_sof !== 16)
+      $fatal(1, "Expected 16 folded SOFs, observed %0d", folded_sof);
+    if (folded_nak !== 16)
+      $fatal(1, "Expected 16 folded IN/NAK transactions, observed %0d", folded_nak);
     if (data_commits !== 2)
       $fatal(1, "Expected two data commits, observed %0d", data_commits);
     if (retained_records !== 3)

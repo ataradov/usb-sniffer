@@ -293,7 +293,7 @@ always @(posedge usb_clk_i) begin
       if (raw_valid_w && raw_type_w == RAW_STOP) begin
         data_error_r <= data_error_r | raw_event_error_w;
         if (ctrl_fold_i && !pending_valid_r && packet_clean_w && pid_r == 4'h5) begin
-          if (fold_sof_count_r != 16'hffff)
+          if (!fold_sof_count_r[4])
             fold_sof_count_r <= fold_sof_count_r + 16'd1;
           { fold_ts_r, fold_ts_ovf_r } <= { header_ts_r, header_ts_ovf_r };
           state_r <= ST_IDLE;
@@ -313,7 +313,7 @@ always @(posedge usb_clk_i) begin
         end else if (ctrl_fold_i && pending_valid_r && packet_clean_w &&
             pid_r == 4'ha && packet_raw_size_w == 11'd1) begin
           pending_valid_r <= 1'b0;
-          if (fold_nak_count_r != 16'hffff)
+          if (!fold_nak_count_r[4])
             fold_nak_count_r <= fold_nak_count_r + 16'd1;
           { fold_ts_r, fold_ts_ovf_r } <= { header_ts_r, header_ts_ovf_r };
           state_r <= ST_IDLE;
@@ -709,8 +709,10 @@ wire commit_fold_w = wr_fold_w && (header_cnt_r == 3'd6);
 
 //-----------------------------------------------------------------------------
 wire fold_pending_w = (fold_sof_count_r != 16'h0) || (fold_nak_count_r != 16'h0);
+wire fold_threshold_w = fold_sof_count_r[4] || fold_nak_count_r[4];
 wire wr_fold_w = (ST_IDLE == state_r && !raw_valid_w && !pending_valid_r &&
-    fold_pending_w && fifo_ready_w && ctrl_enable_i);
+    fold_pending_w && (fold_threshold_w || status_pending_r || ts_pending_r) &&
+    fifo_ready_w && ctrl_enable_i);
 wire wr_status_w = (ST_IDLE == state_r && !raw_valid_w && !pending_valid_r && !fold_pending_w &&
     (status_pending_r || ts_pending_r) && fifo_ready_w && ctrl_enable_i);
 wire wr_header_w = (ST_HEADER == state_r);
