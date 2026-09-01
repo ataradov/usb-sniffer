@@ -61,6 +61,15 @@ if ($LASTEXITCODE) { throw 'USB PHY simulation build failed' }
 & $vvp (Join-Path $PSScriptRoot 'usb_phy_tb.vvp')
 if ($LASTEXITCODE) { throw 'USB PHY simulation failed' }
 
+& $iverilog -g2012 -Wall -s usb_capture_gap_tb -o (Join-Path $PSScriptRoot 'usb_capture_gap_tb.vvp') `
+  (Join-Path $PSScriptRoot 'usb_capture_gap_tb.v') `
+  (Join-Path $projectRoot 'fpga\usb_capture.v') `
+  (Join-Path $projectRoot 'fpga\usb_phy.v') `
+  (Join-Path $projectRoot 'fpga\speed_detect.v')
+if ($LASTEXITCODE) { throw 'USB capture gap simulation build failed' }
+& $vvp (Join-Path $PSScriptRoot 'usb_capture_gap_tb.vvp')
+if ($LASTEXITCODE) { throw 'USB capture gap simulation failed' }
+
 & $iverilog -g2012 -Wall -s fifo_sync_tb -o (Join-Path $PSScriptRoot 'fifo_sync_tb.vvp') `
   (Join-Path $PSScriptRoot 'fifo_sync_tb.v') (Join-Path $projectRoot 'fpga\fifo_sync.v')
 if ($LASTEXITCODE) { throw 'FIFO simulation build failed' }

@@ -1,6 +1,7 @@
 /tools/
 /dist/
 /backups/
+/scratch/
 /installer/usb_sniffer.exe
 /tests/*.exe
 /tests/*.vvp

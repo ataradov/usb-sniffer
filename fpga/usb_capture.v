@@ -105,6 +105,90 @@ usb_phy usb_phy_inst (
 );
 
 //-----------------------------------------------------------------------------
+// HS USB permits an opposite-direction response after only 8 bit times (one
+// 60 MHz ULPI clock). Formatting a packet header takes seven clocks, so ULPI
+// events must be buffered independently from the main capture FIFO.
+localparam RAW_PTR_WIDTH = 6;
+localparam
+  RAW_START    = 2'd0,
+  RAW_DATA     = 2'd1,
+  RAW_STOP     = 2'd2,
+  RAW_OVERFLOW = 2'd3;
+
+(* ram_style = "distributed" *) reg [31:0] raw_mem_r [0:(1 << RAW_PTR_WIDTH)-1];
+reg [RAW_PTR_WIDTH:0] raw_wr_ptr_r;
+reg [RAW_PTR_WIDTH:0] raw_rd_ptr_r;
+reg [31:0] raw_event_r;
+reg raw_event_valid_r;
+reg raw_drop_r;
+reg [15:0] raw_duration_r;
+reg raw_error_r;
+
+wire raw_empty_w = (raw_wr_ptr_r == raw_rd_ptr_r);
+wire raw_full_w = (raw_wr_ptr_r[RAW_PTR_WIDTH] != raw_rd_ptr_r[RAW_PTR_WIDTH]) &&
+    (raw_wr_ptr_r[RAW_PTR_WIDTH-1:0] == raw_rd_ptr_r[RAW_PTR_WIDTH-1:0]);
+wire [31:0] raw_event_w = raw_event_r;
+wire [1:0] raw_type_w = raw_event_w[31:30];
+wire raw_event_error_w = raw_event_w[29];
+wire raw_event_ts_ovf_w = raw_event_w[28];
+wire [19:0] raw_event_timestamp_w = raw_event_w[27:8];
+wire [15:0] raw_event_duration_w = raw_event_w[15:0];
+wire [7:0] raw_event_data_w = raw_event_w[7:0];
+wire raw_valid_w = raw_event_valid_r;
+
+wire raw_input_w = rx_start_w || utmi_rx_valid_w || rx_stop_w;
+wire [31:0] raw_input_data_w =
+  rx_start_w ? { RAW_START, 1'b0, ts_overflow_r, timestamp_r, 8'h00 } :
+  utmi_rx_valid_w ? { RAW_DATA, utmi_rx_error_w, 21'h0, utmi_rx_data_w } :
+  { RAW_STOP, raw_error_r | utmi_rx_error_w, 13'h0, raw_duration_r };
+
+wire raw_recover_w = raw_drop_r && !utmi_rx_active_w;
+wire raw_push_w = !raw_full_w && ((raw_input_w && !raw_drop_r) || raw_recover_w);
+wire [31:0] raw_push_data_w = raw_recover_w ? { RAW_OVERFLOW, 30'h0 } : raw_input_data_w;
+
+always @(posedge usb_clk_i) begin
+  if (reset_i) begin
+    raw_wr_ptr_r <= 1'd0;
+    raw_drop_r <= 1'b0;
+  end else begin
+    if (raw_push_w) begin
+      raw_mem_r[raw_wr_ptr_r[RAW_PTR_WIDTH-1:0]] <= raw_push_data_w;
+      raw_wr_ptr_r <= raw_wr_ptr_r + 1'd1;
+    end
+
+    if (raw_recover_w && !raw_full_w)
+      raw_drop_r <= 1'b0;
+    else if (raw_input_w && raw_full_w)
+      raw_drop_r <= 1'b1;
+  end
+end
+
+always @(posedge usb_clk_i) begin
+  if (reset_i) begin
+    raw_rd_ptr_r <= 1'd0;
+    raw_event_valid_r <= 1'b0;
+  end else if ((!raw_event_valid_r || raw_pop_w) && !raw_empty_w) begin
+    raw_event_r <= raw_mem_r[raw_rd_ptr_r[RAW_PTR_WIDTH-1:0]];
+    raw_rd_ptr_r <= raw_rd_ptr_r + 1'd1;
+    raw_event_valid_r <= 1'b1;
+  end else if (raw_pop_w) begin
+    raw_event_valid_r <= 1'b0;
+  end
+end
+
+always @(posedge usb_clk_i) begin
+  if (reset_i || rx_start_w) begin
+    raw_duration_r <= 16'h0;
+    raw_error_r <= 1'b0;
+  end else if (utmi_rx_active_r) begin
+    if (raw_duration_r != 16'hffff)
+      raw_duration_r <= raw_duration_r + 16'd1;
+    if (utmi_rx_error_w)
+      raw_error_r <= 1'b1;
+  end
+end
+
+//-----------------------------------------------------------------------------
 localparam
   ST_IDLE     = 3'd0,
   ST_DATA     = 3'd1,
@@ -120,6 +204,10 @@ reg        pid_rx_r;
 reg        pid_ok_r;
 reg  [3:0] pid_r;
 
+wire raw_pop_w = raw_valid_w &&
+    ((ST_IDLE == state_r) || (ST_DATA == state_r) || (ST_DATA_OVF == state_r) ||
+    (ST_OVERFLOW == state_r));
+
 always @(posedge usb_clk_i) begin
   if (reset_i) begin
     data_size_r  <= STATUS_HEADER_SIZE;
@@ -133,36 +221,42 @@ always @(posedge usb_clk_i) begin
     ST_IDLE: begin
       data_size_r <= STATUS_HEADER_SIZE;
 
-      if (rx_start_w && ctrl_enable_i) begin
+      if (raw_valid_w && raw_type_w == RAW_START && ctrl_enable_i) begin
         data_size_r  <= DATA_HEADER_SIZE;
         data_error_r <= 1'b0;
         pid_rx_r     <= 1'b0;
         state_r      <= fifo_ready_w ? ST_DATA : ST_OVERFLOW;
+      end else if (raw_valid_w && raw_type_w == RAW_OVERFLOW) begin
+        overflow_r <= 1'b1;
       end
     end
 
     ST_DATA: begin
-      if (!utmi_rx_active_w) begin
+      if (raw_valid_w && raw_type_w == RAW_STOP) begin
+        data_error_r <= data_error_r | raw_event_error_w;
         state_r <= ST_HEADER;
-      end else if (fifo_overflow_w && utmi_rx_valid_w) begin
+      end else if (raw_valid_w && raw_type_w == RAW_OVERFLOW) begin
+        overflow_r <= 1'b1;
+        state_r <= ST_IDLE;
+      end else if (fifo_overflow_w && wr_data_w) begin
         state_r <= ST_OVERFLOW;
       end else if (data_size_r == 11'd1280) begin
         state_r <= ST_DATA_OVF;
-      end else if (utmi_rx_valid_w)
+      end else if (wr_data_w)
         data_size_r <= data_size_r + 11'd1;
 
-      if (utmi_rx_valid_w && !pid_rx_r) begin
+      if (wr_data_w && !pid_rx_r) begin
         pid_rx_r <= 1'b1;
-        pid_ok_r <= (utmi_rx_data_w[3:0] == ~utmi_rx_data_w[7:4]);
-        pid_r    <= utmi_rx_data_w[3:0];
+        pid_ok_r <= (raw_event_data_w[3:0] == ~raw_event_data_w[7:4]);
+        pid_r    <= raw_event_data_w[3:0];
       end
 
-      if (utmi_rx_error_w)
+      if (wr_data_w && raw_event_error_w)
         data_error_r <= 1'b1;
     end
 
     ST_DATA_OVF: begin
-      if (!utmi_rx_active_w) begin
+      if (raw_valid_w && raw_type_w == RAW_STOP) begin
         state_r <= ST_HEADER;
       end
     end
@@ -177,7 +271,7 @@ always @(posedge usb_clk_i) begin
     ST_OVERFLOW: begin
       overflow_r <= 1'b1;
 
-      if (!utmi_rx_active_w)
+      if (raw_valid_w && (raw_type_w == RAW_STOP || raw_type_w == RAW_OVERFLOW))
         state_r <= ST_IDLE;
     end
   endcase
@@ -413,7 +507,9 @@ reg        header_ts_ovf_r;
 always @(posedge usb_clk_i) begin
   if (reset_i)
     { header_ts_r, header_ts_ovf_r } <= { 20'h0, 1'b0 };
-  else if (!wr_status_w && ST_IDLE == state_r)
+  else if (raw_pop_w && raw_type_w == RAW_START)
+    { header_ts_r, header_ts_ovf_r } <= { raw_event_timestamp_w, raw_event_ts_ovf_w };
+  else if (!raw_valid_w && !wr_status_w && ST_IDLE == state_r)
     { header_ts_r, header_ts_ovf_r } <= { timestamp_r, ts_overflow_r };
 end
 
@@ -421,10 +517,10 @@ end
 reg [15:0] header_duration_r;
 
 always @(posedge usb_clk_i) begin
-  if (reset_i || rx_start_w)
+  if (reset_i)
     header_duration_r <= 16'h0;
-  else if (utmi_rx_active_r && (header_duration_r != 16'hffff))
-    header_duration_r <= header_duration_r + 16'd1;
+  else if (raw_pop_w && raw_type_w == RAW_STOP)
+    header_duration_r <= raw_event_duration_w;
 end
 
 //-----------------------------------------------------------------------------
@@ -450,17 +546,23 @@ wire commit_data_w   = wr_header_w && (header_cnt_r == (DATA_HEADER_SIZE-1'd1));
 wire commit_status_w = wr_status_w && (header_cnt_r == (STATUS_HEADER_SIZE-1'd1));
 
 //-----------------------------------------------------------------------------
-wire wr_status_w = (ST_IDLE == state_r && (status_pending_r || ts_pending_r) && fifo_ready_w && ctrl_enable_i);
-wire wr_header_w = (ST_HEADER == state_r || (ST_DATA == state_r && !utmi_rx_active_w));
-wire wr_data_w   = (ST_DATA == state_r && utmi_rx_active_w && utmi_rx_valid_w);
+wire wr_status_w = (ST_IDLE == state_r && !raw_valid_w &&
+    (status_pending_r || ts_pending_r) && fifo_ready_w && ctrl_enable_i);
+wire wr_header_w = (ST_HEADER == state_r);
+wire wr_data_w   = (ST_DATA == state_r && raw_valid_w && raw_type_w == RAW_DATA);
 
-wire [PTR_WIDTH-1:0] fifo_wr_ptr_w = fifo_wr_ptr_r + (wr_data_w ? data_size_r : header_cnt_r);
+// Calculate both addresses in parallel. Selecting the offset before the adder
+// puts state decoding on a long carry-chain path and misses the 60 MHz timing.
+wire [PTR_WIDTH-1:0] fifo_wr_data_ptr_w = fifo_wr_ptr_r + data_size_r;
+wire [PTR_WIDTH-1:0] fifo_wr_header_ptr_w = fifo_wr_ptr_r + header_cnt_r;
+wire [PTR_WIDTH-1:0] fifo_wr_ptr_w =
+    (ST_DATA == state_r) ? fifo_wr_data_ptr_w : fifo_wr_header_ptr_w;
 wire fifo_wr_w = (wr_status_w || wr_data_w || wr_header_w) && !fifo_overflow_w;
 wire fifo_commit_w = commit_status_w || commit_data_w;
 
 wire [7:0] fifo_data_w =
   wr_status_w ? status_data_w :
-  wr_header_w ? header_data_w : utmi_rx_data_w;
+  wr_header_w ? header_data_w : raw_event_data_w;
 
 wire fifo_ready_w = (fifo_size_r > 5'd31);
 
@@ -476,10 +578,12 @@ wire fifo_overflow_w = (fifo_wr_ptr_w == fifo_rd_ptr_r) && !fifo_empty_w;
 always @(posedge usb_clk_i) begin
   if (reset_i)
     fifo_size_r <= FIFO_SIZE;
-  else if (fifo_commit_w)
-    fifo_size_r <= fifo_size_r - data_size_r;
-  else if (int_valid_o && int_ack_i)
-    fifo_size_r <= fifo_size_r + 1'd1;
+  else case ({ fifo_commit_w, (int_valid_o && int_ack_i) })
+    2'b10: fifo_size_r <= fifo_size_r - data_size_r;
+    2'b01: fifo_size_r <= fifo_size_r + 1'd1;
+    2'b11: fifo_size_r <= fifo_size_r - data_size_r + 1'd1;
+    default: fifo_size_r <= fifo_size_r;
+  endcase
 end
 
 always @(posedge usb_clk_i) begin
@@ -519,8 +623,8 @@ reg  [15:0] crc16_r;
 reg         crc5_ok_r;
 reg         crc16_ok_r;
 
-wire  [4:0] crc5_w  = usb_crc5(crc5_r, utmi_rx_data_w);
-wire [15:0] crc16_w = usb_crc16(crc16_r, utmi_rx_data_w);
+wire  [4:0] crc5_w  = usb_crc5(crc5_r, raw_event_data_w);
+wire [15:0] crc16_w = usb_crc16(crc16_r, raw_event_data_w);
 
 always @(posedge usb_clk_i) begin
   if (reset_i || ST_IDLE == state_r) begin
@@ -528,7 +632,7 @@ always @(posedge usb_clk_i) begin
     crc16_r    <= 16'hffff;
     crc5_ok_r  <= 1'b0;
     crc16_ok_r <= 1'b0;
-  end else if (utmi_rx_active_w && utmi_rx_valid_w && pid_rx_r) begin
+  end else if (wr_data_w && pid_rx_r) begin
     crc5_r     <= crc5_w;
     crc16_r    <= crc16_w;
     crc5_ok_r  <= (5'h0c == crc5_w);
