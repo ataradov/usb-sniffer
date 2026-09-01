@@ -77,14 +77,14 @@ void log_print(char *fmt, ...)
 }
 
 //-----------------------------------------------------------------------------
-u8 *find_str(u8 *buf, int size, char *str)
+u8 *find_str(u8 *buf, int size, const char *str)
 {
-  int len = strlen(str);
+  size_t len = strlen(str);
 
-  if (size == 0 || len ==0 || size < len)
+  if (size <= 0 || len == 0 || (size_t)size < len)
     return NULL;
 
-  for (int i = 0; i < (size - len); i++)
+  for (size_t i = 0; i <= ((size_t)size - len); i++)
   {
     if (memcmp(buf + i, str, len) == 0)
       return buf + i;

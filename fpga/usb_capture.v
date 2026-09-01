@@ -57,6 +57,7 @@ wire [1:0] speed_detect_w;
 
 speed_detect speed_detect_inst (
   .clk_i       (usb_clk_i),
+  .reset_i     (reset_i),
   .dm_i        (usb_dm_i),
   .dp_i        (usb_dp_i),
   .vbus_i      (utmi_vbus_w[1]),
@@ -188,8 +189,13 @@ reg dp_r;
 reg dm_r;
 
 always @(posedge usb_clk_i) begin
-  dp_r <= dp_r ? usb_dp_i[1] : (usb_dp_i == 2'd3);
-  dm_r <= dm_r ? usb_dm_i[1] : (usb_dm_i == 2'd3);
+  if (reset_i) begin
+    dp_r <= 1'b0;
+    dm_r <= 1'b0;
+  end else begin
+    dp_r <= dp_r ? usb_dp_i[1] : (usb_dp_i == 2'd3);
+    dm_r <= dm_r ? usb_dm_i[1] : (usb_dm_i == 2'd3);
+  end
 end
 
 //-----------------------------------------------------------------------------
@@ -264,7 +270,7 @@ reg trigger_r;
 reg [5:0] trigger_filter_r;
 
 wire trigger_stable_w  = (trigger_i == trigger_r);
-wire trigger_changed_w = (trigger_filter_r == 6'h60); // 1 us
+wire trigger_changed_w = (trigger_filter_r == 6'd60); // 1 us
 
 always @(posedge usb_clk_i) begin
   if (reset_i || trigger_stable_w || trigger_changed_w)

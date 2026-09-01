@@ -323,6 +323,10 @@ static void capture_info(u64 ts, char *fmt, ...)
   int len = vsnprintf(str, sizeof(str), fmt, args);
   va_end(args);
 
+  os_check(len >= 0, "vsnprintf() error");
+  if (len >= (int)sizeof(str))
+    len = sizeof(str) - 1;
+
   line_state_event();
   stop_folding();
 
@@ -489,11 +493,6 @@ static void stop_folding(void)
   capture_fold_count   = 0;
   capture_fold_buf_ptr = 0;
 
-  if (count == 1)
-    capture_info(capture_ts, "Folded empty frame");
-  else if (count > 1)
-    capture_info(capture_ts, "Folded %d empty frames", count);
-
   for (int i = 0; i < ptr; i++)
   {
     if (capture_fold_buf[i].size < 0)
@@ -501,6 +500,11 @@ static void stop_folding(void)
     else
       write_packet(capture_fold_buf[i].ts, capture_fold_buf[i].data, capture_fold_buf[i].size);
   }
+
+  if (count == 1)
+    capture_info(capture_ts, "Folded empty frame");
+  else if (count > 1)
+    capture_info(capture_ts, "Folded %d empty frames", count);
 }
 
 //-----------------------------------------------------------------------------

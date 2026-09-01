@@ -1,0 +1,8 @@
+/tools/
+/dist/
+/backups/
+/installer/usb_sniffer.exe
+/tests/*.exe
+/tests/*.vvp
+/tests/*.pcapng
+/tests/*.bin

@@ -300,24 +300,34 @@ static bool handle_vendor_request(void)
 {
   if (USB_CMD(IN, DEVICE, VENDOR) == bmRequestType && CMD_I2C_READ == bRequest)
   {
-    if (i2c_read(wValueL, wLengthL))
+    if (0 != wIndexL || 0 != wIndexH || 0 != wLengthH || wLengthL > USB_CONTROL_EP_SIZE)
+      usb_control_stall();
+    else if (i2c_read(wValueL, wLengthL))
       usb_control_send(wLengthL);
+    else
+      usb_control_stall();
 
     return true;
   }
   else if (USB_CMD(OUT, DEVICE, VENDOR) == bmRequestType && CMD_I2C_WRITE == bRequest)
   {
-    usb_control_recv();
-
-    if (!i2c_write(wValueL, wLengthL))
+    if (0 != wIndexL || 0 != wIndexH || 0 != wLengthH || wLengthL > USB_CONTROL_EP_SIZE)
+    {
       usb_control_stall();
+    }
+    else if (usb_control_recv() != wLengthL || !i2c_write(wValueL, wLengthL))
+    {
+      usb_control_stall();
+    }
 
     return true;
   }
 
   else if (USB_CMD(OUT, DEVICE, VENDOR) == bmRequestType && CMD_JTAG_ENABLE == bRequest)
   {
-    if (wValueL)
+    if (wValueH || wIndexL || wIndexH || wLengthL || wLengthH || wValueL > 1)
+      usb_control_stall();
+    else if (wValueL)
       jtag_enable();
     else
       jtag_disable();
@@ -326,21 +336,34 @@ static bool handle_vendor_request(void)
   }
   else if (USB_CMD(OUT, DEVICE, VENDOR) == bmRequestType && CMD_JTAG_REQUEST == bRequest)
   {
-    usb_control_recv();
-    jtag_transfer(wValueL);
+    uint8_t size = (wValueL + 3) >> 2;
+
+    if (0 == wValueL || 0 != wValueH || 0 != wIndexL || 0 != wIndexH || 0 != wLengthH || wLengthL != size)
+      usb_control_stall();
+    else if (usb_control_recv() != size)
+      usb_control_stall();
+    else
+      jtag_transfer(wValueL);
 
     return true;
   }
   else if (USB_CMD(IN, DEVICE, VENDOR) == bmRequestType && CMD_JTAG_RESPONSE == bRequest)
   {
-    usb_control_send(wLengthL);
+    if (0 != wValueL || 0 != wValueH || 0 != wIndexL || 0 != wIndexH || 0 != wLengthH ||
+        wLengthL > USB_CONTROL_EP_SIZE)
+      usb_control_stall();
+    else
+      usb_control_send(wLengthL);
 
     return true;
   }
 
   else if (USB_CMD(OUT, DEVICE, VENDOR) == bmRequestType && CMD_CTRL == bRequest)
   {
-    ctrl_transfer(wValueL);
+    if (0 != wValueH || 0 != wIndexL || 0 != wIndexH || 0 != wLengthL || 0 != wLengthH || wValueL > 0x1f)
+      usb_control_stall();
+    else
+      ctrl_transfer(wValueL);
 
     return true;
   }
@@ -352,17 +375,30 @@ static bool handle_vendor_request(void)
 void reset_endpoints(void)
 {
   EP1OUTCFG = 0;
+  SYNCDELAY;
   EP1INCFG  = 0;
+  SYNCDELAY;
   EP2CFG    = 0;
+  SYNCDELAY;
   EP4CFG    = 0;
+  SYNCDELAY;
   EP6CFG    = 0;
+  SYNCDELAY;
   EP8CFG    = 0;
+  SYNCDELAY;
 }
 
 //-----------------------------------------------------------------------------
 void setup_endpoints(void)
 {
   EP2CFG = EPCFG_VALID | EPCFG_TYPE_BULK | EPCFG_DIR_IN | EPCFG_SIZE_512 | EPCFG_BUF_QUAD;
+  SYNCDELAY;
+
+  FIFORESET = FIFORESET_NAKALL;
+  SYNCDELAY;
+  FIFORESET = FIFORESET_NAKALL | 2;
+  SYNCDELAY;
+  FIFORESET = 0;
   SYNCDELAY;
 }
 

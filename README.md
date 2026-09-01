@@ -121,4 +121,40 @@ the number of the captured packets (0 for unlimited).
 
 After interface is configured, start and stop the capture as with any other interface.
 
+## Windows build and test
+
+The Windows host utility requires MinGW-w64 GCC, pkg-config and libusb. The FX2LP
+firmware requires SDCC. This repository's Windows regression script expects the
+portable SDCC installation under `tools/sdcc-4.6.0`. Install it without modifying
+the system toolchain using:
+
+```powershell
+.\scripts\install-sdcc.ps1
+```
+
+The regression script builds/tests all components that can be verified without
+Lattice Diamond:
+
+```powershell
+.\tests\run.ps1
+```
+
+Build the host executable from an MSYS2/MinGW environment with:
+
+```powershell
+$env:Path = 'C:\msys64\mingw64\bin;C:\msys64\usr\bin;' + $env:Path
+Push-Location software
+make clean
+make
+Pop-Location
+```
+
+Create the Windows Wireshark extcap installer after building the host executable:
+
+```powershell
+.\installer\build.ps1
+```
+
+The installer is written to `dist\USB-Sniffer-Wireshark-Plugin-Setup.exe`.
+
 

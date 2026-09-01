@@ -191,30 +191,37 @@ u64 os_rand64(u64 seed)
 int os_file_read_all(const char *name, u8 **data)
 {
   struct stat stat;
-  int fd, rsize;
+  int fd, size, offset = 0;
 
   fd = open(name, O_RDONLY | O_BINARY);
-  os_check(fd, "os_file_read_all(): %s", strerror(errno));
+  os_check(fd >= 0, "os_file_read_all(): %s", strerror(errno));
 
-  fstat(fd, &stat);
+  os_check(0 == fstat(fd, &stat), "os_file_read_all(): %s", strerror(errno));
+  os_check(stat.st_size >= 0 && stat.st_size <= (INT_MAX - FILE_ALLOC_FOOTER),
+      "os_file_read_all(): file is too big");
 
-  *data = os_alloc(stat.st_size + FILE_ALLOC_FOOTER);
+  size = (int)stat.st_size;
+  *data = os_alloc(size + FILE_ALLOC_FOOTER);
 
-  rsize = read(fd, *data, stat.st_size);
-  os_check(fd, "os_file_read_all(): %s", strerror(errno));
+  while (offset < size)
+  {
+    int res = read(fd, *data + offset, size - offset);
 
-  os_check(rsize == stat.st_size, "os_file_read_all(): failed to read entire file");
+    os_check(res >= 0, "os_file_read_all(): %s", strerror(errno));
+    os_check(res != 0, "os_file_read_all(): unexpected end of file");
+    offset += res;
+  }
 
-  close(fd);
+  os_check(0 == close(fd), "os_file_read_all(): %s", strerror(errno));
 
-  return rsize;
+  return size;
 }
 
 //-----------------------------------------------------------------------------
 int os_file_open_for_read(const char *name)
 {
   int fd = open(name, O_RDONLY | O_BINARY);
-  os_check(fd, "os_file_open_for_read(): %s", strerror(errno));
+  os_check(fd >= 0, "os_file_open_for_read(): %s", strerror(errno));
   return fd;
 }
 
@@ -222,7 +229,7 @@ int os_file_open_for_read(const char *name)
 int os_file_open_for_write(const char *name)
 {
   int fd = open(name, O_WRONLY | O_BINARY | O_CREAT | O_TRUNC, 0644);
-  os_check(fd, "os_file_open_for_write(): %s", strerror(errno));
+  os_check(fd >= 0, "os_file_open_for_write(): %s", strerror(errno));
   return fd;
 }
 
@@ -230,7 +237,7 @@ int os_file_open_for_write(const char *name)
 int os_file_read(int fd, u8 *data, int size)
 {
   int res = read(fd, data, size);
-  os_check(res, "os_file_read(): %s", strerror(errno));
+  os_check(res >= 0, "os_file_read(): %s", strerror(errno));
   return res;
 }
 
@@ -238,7 +245,7 @@ int os_file_read(int fd, u8 *data, int size)
 int os_file_write(int fd, u8 *data, int size)
 {
   int res = write(fd, data, size);
-  os_check(res, "os_file_write(): %s", strerror(errno));
+  os_check(res >= 0, "os_file_write(): %s", strerror(errno));
   return res;
 }
 
@@ -249,17 +256,18 @@ void os_file_close(int fd)
 }
 
 //-----------------------------------------------------------------------------
-int os_file_get_size(const char *name)
+int os_file_size(const char *name)
 {
   struct stat stat;
   int fd;
 
   fd = open(name, O_RDONLY | O_BINARY);
-  os_check(fd, "os_file_get_size(): %s", strerror(errno));
-  fstat(fd, &stat);
-  close(fd);
+  os_check(fd >= 0, "os_file_size(): %s", strerror(errno));
+  os_check(0 == fstat(fd, &stat), "os_file_size(): %s", strerror(errno));
+  os_check(stat.st_size >= 0 && stat.st_size <= INT_MAX, "os_file_size(): file is too big");
+  os_check(0 == close(fd), "os_file_size(): %s", strerror(errno));
 
-  return stat.st_size;
+  return (int)stat.st_size;
 }
 
 //-----------------------------------------------------------------------------

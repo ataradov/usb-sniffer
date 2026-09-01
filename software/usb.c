@@ -62,6 +62,13 @@ static void usb_check_error(int error, const char *text)
 }
 
 //-----------------------------------------------------------------------------
+static void usb_check_transfer(int actual, int expected, const char *text)
+{
+  usb_check_error(actual, text);
+  os_check(actual == expected, "%s: short transfer (%d of %d bytes)", text, actual, expected);
+}
+
+//-----------------------------------------------------------------------------
 void usb_init(void)
 {
   int rc = libusb_init(NULL);
@@ -72,12 +79,13 @@ void usb_init(void)
 bool usb_open(int vid, int pid)
 {
   libusb_device **usb_devices;
-  int rc, count;
+  int rc;
+  ssize_t count;
 
   count = libusb_get_device_list(NULL, &usb_devices);
   usb_check_error(count, "libusb_get_device_list()");
 
-  for (int i = 0; i < count; i++)
+  for (ssize_t i = 0; i < count; i++)
   {
     libusb_device *dev = usb_devices[i];
     struct libusb_device_descriptor desc;
@@ -118,6 +126,7 @@ void usb_close(void)
   if (g_usb_handle)
     libusb_close(g_usb_handle);
 
+  g_usb_handle = NULL;
   libusb_exit(NULL);
 }
 
@@ -131,7 +140,7 @@ void usb_fx2lp_reset(bool reset)
     LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE,
     CMD_FX2LP_REQUEST, CPUCS_ADDR, 0/*wIndex*/, &cpucs, sizeof(cpucs), TIMEOUT);
 
-  usb_check_error(rc, "usb_fx2lp_reset()");
+  usb_check_transfer(rc, sizeof(cpucs), "usb_fx2lp_reset()");
 }
 
 //-----------------------------------------------------------------------------
@@ -143,7 +152,7 @@ void usb_fx2lp_sram_read(int addr, u8 *data, int size)
     LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE,
     CMD_FX2LP_REQUEST, addr, 0/*wIndex*/, data, size, TIMEOUT);
 
-  usb_check_error(rc, "usb_fx2lp_sram_read()");
+  usb_check_transfer(rc, size, "usb_fx2lp_sram_read()");
 }
 
 //-----------------------------------------------------------------------------
@@ -155,7 +164,7 @@ void usb_fx2lp_sram_write(int addr, u8 *data, int size)
     LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE,
     CMD_FX2LP_REQUEST, addr, 0/*wIndex*/, data, size, TIMEOUT);
 
-  usb_check_error(rc, "usb_fx2lp_sram_write()");
+  usb_check_transfer(rc, size, "usb_fx2lp_sram_write()");
 }
 
 //-----------------------------------------------------------------------------
@@ -167,7 +176,7 @@ void usb_i2c_read(int addr, u8 *data, int size)
     LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE,
     CMD_I2C_READ, addr | 1, 0/*wIndex*/, data, size, TIMEOUT);
 
-  usb_check_error(rc, "usb_i2c_read()");
+  usb_check_transfer(rc, size, "usb_i2c_read()");
 }
 
 //-----------------------------------------------------------------------------
@@ -179,7 +188,7 @@ void usb_i2c_write(int addr, u8 *data, int size)
     LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE,
     CMD_I2C_WRITE, addr, 0/*wIndex*/, data, size, TIMEOUT);
 
-  usb_check_error(rc, "usb_i2c_write()");
+  usb_check_transfer(rc, size, "usb_i2c_write()");
 }
 
 //-----------------------------------------------------------------------------
@@ -191,7 +200,7 @@ void usb_jtag_enable(bool enable)
     LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE,
     CMD_JTAG_ENABLE, enable/*wValue*/, 0/*wIndex*/, NULL, 0, TIMEOUT);
 
-  usb_check_error(rc, "usb_jtag_enable()");
+  usb_check_transfer(rc, 0, "usb_jtag_enable()");
 }
 
 //-----------------------------------------------------------------------------
@@ -211,7 +220,7 @@ void usb_jtag_request(u8 *data, int count)
     LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE,
     CMD_JTAG_REQUEST, count/*wValue*/, 0/*wIndex*/, buf, (count + 3) / 4, TIMEOUT);
 
-  usb_check_error(rc, "usb_jtag_request()");
+  usb_check_transfer(rc, (count + 3) / 4, "usb_jtag_request()");
 }
 
 //-----------------------------------------------------------------------------
@@ -228,7 +237,7 @@ void usb_jtag_response(u8 *data, int count)
     LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE,
     CMD_JTAG_RESPONSE, 0/*wValue*/, 0/*wIndex*/, buf, (count + 3) / 4, TIMEOUT);
 
-  usb_check_error(rc, "usb_jtag_response()");
+  usb_check_transfer(rc, (count + 3) / 4, "usb_jtag_response()");
 
   for (int i = 0; i < (count + 3) / 4; i++)
     data[i / 2] |= ((buf[i] & 0x0f) << ((i % 2) * 4));
@@ -245,7 +254,7 @@ void usb_ctrl(int index, int value)
     LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE,
     CMD_CTRL, value/*wValue*/, 0/*wIndex*/, NULL, 0, TIMEOUT);
 
-  usb_check_error(rc, "usb_ctrl()");
+  usb_check_transfer(rc, 0, "usb_ctrl()");
 }
 
 //-----------------------------------------------------------------------------
@@ -339,7 +348,8 @@ void usb_data_transfer(void)
 
   while (1)
   {
-    libusb_handle_events(NULL);
+    int rc = libusb_handle_events(NULL);
+    usb_check_error(rc, "libusb_handle_events()");
   }
 }
 

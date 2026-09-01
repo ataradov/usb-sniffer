@@ -5,6 +5,7 @@
 
 module speed_detect (
   input         clk_i,
+  input         reset_i,
 
   input   [1:0] dm_i,
   input   [1:0] dp_i,
@@ -42,11 +43,17 @@ reg [1:0] dm_r, dp_r;
 reg [5:0] holdoff_r;
 
 always @(posedge clk_i) begin
-  { dmp_r, dpp_r } <= { dm_i, dp_i };
+  if (reset_i)
+    { dmp_r, dpp_r } <= 4'd0;
+  else
+    { dmp_r, dpp_r } <= { dm_i, dp_i };
 end
 
 always @(posedge clk_i) begin
-  if ({ dmp_r, dpp_r } != { dm_i, dp_i })
+  if (reset_i) begin
+    { dm_r, dp_r } <= 4'd0;
+    holdoff_r <= 6'd0;
+  end else if ({ dmp_r, dpp_r } != { dm_i, dp_i })
     holdoff_r <= 6'd0;
   else if (holdoff_r == 6'd63) // ~1 us
     { dm_r, dp_r } <= { dm_i, dp_i };
@@ -61,7 +68,9 @@ reg [17:0] reset_timer_r;
 wire reset_w = (reset_timer_r == 18'd65535); // 1.09 ms
 
 always @(posedge clk_i) begin
-  if ((dm_i != 2'd0) || (dp_i != 2'd0) || rx_active_i)
+  if (reset_i)
+    reset_timer_r <= 18'd0;
+  else if ((dm_i != 2'd0) || (dp_i != 2'd0) || rx_active_i)
     reset_timer_r <= 18'd0;
   else if (!reset_w)
     reset_timer_r <= reset_timer_r + 18'd1;
@@ -70,13 +79,14 @@ end
 //-----------------------------------------------------------------------------
 reg [1:0] state_r = ST_IDLE;
 reg [1:0] speed_r = USB_SPEED_RESET;
-reg [5:0] delay_r;
 
 always @(posedge clk_i) begin
-  if (reset_w || !vbus_i) begin
+  if (reset_i) begin
     speed_r <= USB_SPEED_RESET;
     state_r <= ST_WAIT;
-    delay_r <= 6'd0;
+  end else if (reset_w || !vbus_i) begin
+    speed_r <= USB_SPEED_RESET;
+    state_r <= ST_WAIT;
   end else if (ST_WAIT == state_r) begin
     if ((dm_r != 2'd0) || (dp_r != 2'd0))
       state_r <= ST_DETECT;
