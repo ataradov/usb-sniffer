@@ -22,6 +22,7 @@
 #define UPDATE_INTERVAL                (2000 * TIME_MS)
 
 #define DATA_HEADER_SIZE               7
+#define COMPACT_DATA_HEADER_SIZE       3
 #define STATUS_HEADER_SIZE             4
 #define DATA_BUF_SIZE                  2048
 #define FOLD_BUF_SIZE                  256
@@ -32,11 +33,13 @@
 #define HEADER_TOGGLE                  0x40
 #define HEADER_ZERO                    0x20
 #define HEADER_TS_OVERFLOW             0x10
+#define HEADER_COMPACT                 HEADER_ZERO
 
 // Byte 3 in data frames
 #define HEADER_OVERFLOW                0x08
 #define HEADER_CRC_ERROR               0x10
 #define HEADER_DATA_ERROR              0x20
+#define HEADER_RAW_OVERFLOW            0x40
 
 // Byte 3 in status frames
 #define HEADER_LS_OFFS                 0
@@ -83,13 +86,13 @@ static int  capture_vbus       = -1;
 static int  capture_trigger    = -1;
 static int  capture_speed      = -1;
 static bool capture_enabled    = false;
-static u64  capture_ts_int     = 0;
 static u64  capture_ts         = 0;
+static u64  capture_ts_ticks   = 0;
 static u64  capture_last_ts    = 0;
 static bool capture_overflow   = false;
+static bool capture_raw_overflow = false;
 static bool capture_crc_error  = false;
 static bool capture_data_error = false;
-static int  capture_duration   = 0;
 static FILE *capture_fd        = NULL;
 static u8   capture_buf[4096];
 static int  capture_buf_ptr    = 0;
@@ -603,11 +606,13 @@ static void data_event(void)
 
   line_state_event();
 
-  if (capture_overflow || data_error || FOLD_BUF_SIZE == capture_fold_buf_ptr)
+  if (capture_overflow || capture_raw_overflow || data_error || FOLD_BUF_SIZE == capture_fold_buf_ptr)
     stop_folding();
 
-  if (capture_overflow)
-    capture_info(capture_ts, "Hardware buffer overflow");
+  if (capture_raw_overflow)
+    capture_info(capture_ts, "Raw event queue overflow");
+  else if (capture_overflow)
+    capture_info(capture_ts, "Formatted output buffer overflow");
 
   if (capture_data_error)
     capture_info(capture_ts, "USB PHY error");
@@ -685,7 +690,7 @@ static void check_header(int toggle, int zero)
 //-----------------------------------------------------------------------------
 static void check_data_size(int size)
 {
-  if (DATA_HEADER_SIZE <= size && size <= MAX_DATA_SIZE)
+  if (COMPACT_DATA_HEADER_SIZE <= size && size <= MAX_DATA_SIZE)
     return;
 
   capture_info(capture_ts, "Error: invalid data size (%d)", size);
@@ -698,7 +703,8 @@ static inline void capture_sm(u8 byte)
   if (capture_header && 0 == capture_data_ptr)
   {
     capture_status = (0 == (byte & HEADER_STATUS));
-    capture_size   = capture_status ? STATUS_HEADER_SIZE : DATA_HEADER_SIZE;
+    capture_size   = capture_status ? STATUS_HEADER_SIZE :
+        ((byte & HEADER_COMPACT) ? COMPACT_DATA_HEADER_SIZE : DATA_HEADER_SIZE);
   }
 
   capture_data[capture_data_ptr++] = byte;
@@ -708,16 +714,31 @@ static inline void capture_sm(u8 byte)
 
   if (capture_header)
   {
-    int ts     = ((capture_data[0] & 0xf) << 16) | (capture_data[1] << 8) | capture_data[2];
     int toggle = (capture_data[0] & HEADER_TOGGLE) ? 1 : 0;
-    int zero   = (capture_data[0] & HEADER_ZERO) ? 1 : 0;
+    bool compact = !capture_status && (capture_data[0] & HEADER_COMPACT);
+    int zero   = (!compact && (capture_data[0] & HEADER_ZERO)) ? 1 : 0;
 
     check_header(toggle, zero);
 
-    if (capture_data[0] & HEADER_TS_OVERFLOW)
-      capture_ts_int += 0x100000;
+    if (compact)
+    {
+      int delta = ((capture_data[0] & 0x07) << 5) | (capture_data[1] >> 3);
+      capture_ts_ticks += delta;
+    }
+    else
+    {
+      int ts = ((capture_data[0] & 0xf) << 16) | (capture_data[1] << 8) | capture_data[2];
+      u64 candidate = (capture_ts_ticks & ~(u64)0xfffff) | ts;
 
-    capture_ts = ((capture_ts_int | ts) * 100) / 6; // convert to ns
+      if (candidate + 0x80000 < capture_ts_ticks)
+        candidate += 0x100000;
+      else if (candidate > capture_ts_ticks + 0x80000 && candidate >= 0x100000)
+        candidate -= 0x100000;
+
+      capture_ts_ticks = candidate;
+    }
+
+    capture_ts = (capture_ts_ticks * 100) / 6; // convert to ns
     capture_toggle = 1 - toggle;
 
     if ((capture_ts - capture_last_ts) > UPDATE_INTERVAL)
@@ -734,15 +755,30 @@ static inline void capture_sm(u8 byte)
     }
     else // data
     {
-      int size = (((int)capture_data[3] & 0x7) << 8) | capture_data[4];
+      int size;
+
+      if (compact)
+      {
+        int error = (capture_data[0] >> 3) & 0x03;
+
+        size = (((int)capture_data[1] & 0x7) << 8) | capture_data[2];
+        capture_overflow = (3 == error);
+        capture_raw_overflow = false;
+        capture_crc_error = (1 == error);
+        capture_data_error = (2 == error);
+      }
+      else
+      {
+        size = (((int)capture_data[3] & 0x7) << 8) | capture_data[4];
+        capture_overflow   = (capture_data[3] & HEADER_OVERFLOW)   ? true : false;
+        capture_raw_overflow = (capture_data[3] & HEADER_RAW_OVERFLOW) ? true : false;
+        capture_crc_error  = (capture_data[3] & HEADER_CRC_ERROR)  ? true : false;
+        capture_data_error = (capture_data[3] & HEADER_DATA_ERROR) ? true : false;
+      }
 
       check_data_size(size);
 
-      capture_size       = size - DATA_HEADER_SIZE;
-      capture_overflow   = (capture_data[3] & HEADER_OVERFLOW)   ? true : false;
-      capture_crc_error  = (capture_data[3] & HEADER_CRC_ERROR)  ? true : false;
-      capture_data_error = (capture_data[3] & HEADER_DATA_ERROR) ? true : false;
-      capture_duration   = ((int)capture_data[5] << 8) | capture_data[6];
+      capture_size       = size - (compact ? COMPACT_DATA_HEADER_SIZE : DATA_HEADER_SIZE);
       capture_header     = (0 == capture_size);
     }
   }
@@ -786,6 +822,7 @@ bool capture_start(void)
 
   usb_ctrl(CaptureCtrl_Speed0, g_opt.capture_speed & 1);
   usb_ctrl(CaptureCtrl_Speed1, g_opt.capture_speed & 2);
+  usb_ctrl(CaptureCtrl_Compact, 1);
 
   usb_ctrl(CaptureCtrl_Reset, 0);
   usb_ctrl(CaptureCtrl_Enable, 1);

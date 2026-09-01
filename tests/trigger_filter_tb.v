@@ -22,6 +22,7 @@ module trigger_filter_tb;
     .int_ack_i(1'b0),
     .ctrl_enable_i(1'b0),
     .ctrl_speed_i(2'b10),
+    .ctrl_compact_i(1'b1),
     .trigger_i(trigger)
   );
 

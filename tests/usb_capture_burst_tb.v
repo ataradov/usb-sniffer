@@ -1,6 +1,9 @@
 `timescale 1ns / 1ps
 
-module usb_capture_gap_tb;
+module usb_capture_burst_tb;
+  localparam PACKET_COUNT = 8;
+  localparam PACKET_SIZE = 515;
+
   reg clk = 0;
   reg reset = 1;
   reg dir = 0;
@@ -13,6 +16,9 @@ module usb_capture_gap_tb;
 
   integer captured_bytes = 0;
   integer captured_packets = 0;
+  integer overflow_events = 0;
+  integer packet;
+  integer byte_index;
 
   assign ulpi_data = phy_drive ? phy_data : 8'hzz;
 
@@ -41,6 +47,8 @@ module usb_capture_gap_tb;
       captured_bytes <= captured_bytes + 1;
     if (dut.commit_data_w)
       captured_packets <= captured_packets + 1;
+    if (dut.raw_pop_w && dut.raw_type_w == 2'd3)
+      overflow_events <= overflow_events + 1;
   end
 
   task rx_command(input [1:0] event_code);
@@ -63,40 +71,34 @@ module usb_capture_gap_tb;
   end
   endtask
 
-  task rx_packet3(input [7:0] b0, input [7:0] b1, input [7:0] b2);
-  begin
-    rx_command(2'b01);
-    rx_byte(b0);
-    rx_byte(b1);
-    rx_byte(b2);
-    rx_command(2'b00);
-  end
-  endtask
-
   initial begin
     repeat (4) @(posedge clk);
     reset <= 0;
 
-    // Allow the ULPI control-register writes and initial status record to finish.
+    // Allow ULPI setup and the initial status record to complete.
     repeat (30) @(posedge clk);
-
-    // Turn the ULPI bus around and establish an inactive RxCmd first.
     rx_command(2'b00);
     rx_command(2'b00);
 
-    // An IN token followed by a device DATA packet after the minimum legal
-    // HS opposite-direction inter-packet delay (8 bit times = one ULPI clock).
-    rx_packet3(8'h69, 8'h00, 8'h00);
-    rx_packet3(8'hc3, 8'h11, 8'h22);
+    // Eight maximum-size packets with only one ULPI clock between them model a
+    // dense HS burst. Header formatting must not make the raw queue overflow.
+    for (packet = 0; packet < PACKET_COUNT; packet = packet + 1) begin
+      rx_command(2'b01);
+      for (byte_index = 0; byte_index < PACKET_SIZE; byte_index = byte_index + 1)
+        rx_byte((byte_index == 0) ? (packet[0] ? 8'h4b : 8'hc3) : byte_index[7:0]);
+      rx_command(2'b00);
+    end
 
-    repeat (80) @(posedge clk);
+    repeat (2000) @(posedge clk);
 
-    if (captured_packets !== 2)
-      $fatal(1, "Expected two packets, captured %0d", captured_packets);
-    if (captured_bytes !== 6)
-      $fatal(1, "Expected six packet bytes, captured %0d", captured_bytes);
+    if (overflow_events !== 0)
+      $fatal(1, "Expected no raw overflows, observed %0d", overflow_events);
+    if (captured_packets !== PACKET_COUNT)
+      $fatal(1, "Expected %0d packets, captured %0d", PACKET_COUNT, captured_packets);
+    if (captured_bytes !== PACKET_COUNT * PACKET_SIZE)
+      $fatal(1, "Expected %0d bytes, captured %0d", PACKET_COUNT * PACKET_SIZE, captured_bytes);
 
-    $display("usb_capture_gap_tb: PASS");
+    $display("usb_capture_burst_tb: PASS");
     $finish;
   end
 endmodule

@@ -15,6 +15,7 @@ enum
   CaptureCtrl_Speed0 = 2,
   CaptureCtrl_Speed1 = 3,
   CaptureCtrl_Test   = 4,
+  CaptureCtrl_Compact = 5,
 };
 
 enum

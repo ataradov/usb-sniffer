@@ -280,7 +280,7 @@ static void ctrl_transfer(uint8_t value)
 //-----------------------------------------------------------------------------
 static inline void jtag_enable(void)
 {
-  IFCONFIG = IFCONFIG_IFCLKSRC | IFCONFIG_IFCLKOE | IFCONFIG_IFCFG_PORTS;
+  IFCONFIG = IFCONFIG_IFCLKSRC | IFCONFIG_IFCLKOE | IFCONFIG_3048MHZ | IFCONFIG_IFCFG_PORTS;
   SYNCDELAY;
 
   JTAG_EN = 1;
@@ -291,7 +291,7 @@ static inline void jtag_disable(void)
 {
   JTAG_EN = 0;
 
-  IFCONFIG = IFCONFIG_IFCLKSRC | IFCONFIG_IFCLKOE | IFCONFIG_IFCFG_FIFO; // IFCONFIG_IFCLKPOL
+  IFCONFIG = IFCONFIG_IFCLKSRC | IFCONFIG_IFCLKOE | IFCONFIG_3048MHZ | IFCONFIG_IFCFG_FIFO; // IFCONFIG_IFCLKPOL
   SYNCDELAY;
 }
 

@@ -21,6 +21,7 @@ module usb_capture (
 
   input         ctrl_enable_i,
   input   [1:0] ctrl_speed_i,
+  input         ctrl_compact_i,
 
   input         trigger_i
 );
@@ -31,6 +32,7 @@ localparam FIFO_SIZE = 1 << PTR_WIDTH;
 
 localparam
   DATA_HEADER_SIZE   = 3'd7,
+  COMPACT_HEADER_SIZE = 3'd3,
   STATUS_HEADER_SIZE = 3'd4;
 
 localparam
@@ -121,8 +123,8 @@ reg [RAW_PTR_WIDTH:0] raw_rd_ptr_r;
 reg [31:0] raw_event_r;
 reg raw_event_valid_r;
 reg raw_drop_r;
-reg [15:0] raw_duration_r;
 reg raw_error_r;
+reg [15:0] raw_duration_r;
 
 wire raw_empty_w = (raw_wr_ptr_r == raw_rd_ptr_r);
 wire raw_full_w = (raw_wr_ptr_r[RAW_PTR_WIDTH] != raw_rd_ptr_r[RAW_PTR_WIDTH]) &&
@@ -132,8 +134,8 @@ wire [1:0] raw_type_w = raw_event_w[31:30];
 wire raw_event_error_w = raw_event_w[29];
 wire raw_event_ts_ovf_w = raw_event_w[28];
 wire [19:0] raw_event_timestamp_w = raw_event_w[27:8];
-wire [15:0] raw_event_duration_w = raw_event_w[15:0];
 wire [7:0] raw_event_data_w = raw_event_w[7:0];
+wire [15:0] raw_event_duration_w = raw_event_w[15:0];
 wire raw_valid_w = raw_event_valid_r;
 
 wire raw_input_w = rx_start_w || utmi_rx_valid_w || rx_stop_w;
@@ -200,9 +202,19 @@ reg  [2:0] state_r;
 reg [10:0] data_size_r;
 reg        data_error_r;
 reg        overflow_r;
+reg        raw_overflow_r;
 reg        pid_rx_r;
 reg        pid_ok_r;
 reg  [3:0] pid_r;
+reg        compact_r;
+reg  [7:0] compact_delta_r;
+
+reg [19:0] last_header_ts_r;
+reg        last_header_valid_r;
+
+wire [19:0] compact_delta_w = raw_event_timestamp_w - last_header_ts_r;
+wire compact_start_w = ctrl_compact_i && last_header_valid_r &&
+    (compact_delta_w <= 20'd255);
 
 wire raw_pop_w = raw_valid_w &&
     ((ST_IDLE == state_r) || (ST_DATA == state_r) || (ST_DATA_OVF == state_r) ||
@@ -213,21 +225,27 @@ always @(posedge usb_clk_i) begin
     data_size_r  <= STATUS_HEADER_SIZE;
     data_error_r <= 1'b0;
     overflow_r   <= 1'b0;
+    raw_overflow_r <= 1'b0;
     pid_rx_r     <= 1'b0;
     pid_ok_r     <= 1'b0;
     pid_r        <= 4'h0;
+    compact_r    <= 1'b0;
+    compact_delta_r <= 8'h0;
     state_r      <= ST_IDLE;
   end else case (state_r)
     ST_IDLE: begin
       data_size_r <= STATUS_HEADER_SIZE;
 
       if (raw_valid_w && raw_type_w == RAW_START && ctrl_enable_i) begin
-        data_size_r  <= DATA_HEADER_SIZE;
+        data_size_r  <= compact_start_w ? COMPACT_HEADER_SIZE : DATA_HEADER_SIZE;
         data_error_r <= 1'b0;
         pid_rx_r     <= 1'b0;
+        compact_r    <= compact_start_w;
+        compact_delta_r <= compact_delta_w[7:0];
         state_r      <= fifo_ready_w ? ST_DATA : ST_OVERFLOW;
       end else if (raw_valid_w && raw_type_w == RAW_OVERFLOW) begin
         overflow_r <= 1'b1;
+        raw_overflow_r <= 1'b1;
       end
     end
 
@@ -237,6 +255,7 @@ always @(posedge usb_clk_i) begin
         state_r <= ST_HEADER;
       end else if (raw_valid_w && raw_type_w == RAW_OVERFLOW) begin
         overflow_r <= 1'b1;
+        raw_overflow_r <= 1'b1;
         state_r <= ST_IDLE;
       end else if (fifo_overflow_w && wr_data_w) begin
         state_r <= ST_OVERFLOW;
@@ -264,6 +283,7 @@ always @(posedge usb_clk_i) begin
     ST_HEADER: begin
       if (commit_data_w) begin
         overflow_r <= 1'b0;
+        raw_overflow_r <= 1'b0;
         state_r <= ST_IDLE;
       end
     end
@@ -478,6 +498,16 @@ end
 
 wire ts_overflow_w = (timestamp_r == 20'hfffff);
 
+always @(posedge usb_clk_i) begin
+  if (reset_i || !ctrl_enable_i) begin
+    last_header_ts_r <= 20'h0;
+    last_header_valid_r <= 1'b0;
+  end else if (fifo_commit_w) begin
+    last_header_ts_r <= header_ts_r;
+    last_header_valid_r <= 1'b1;
+  end
+end
+
 //-----------------------------------------------------------------------------
 reg ts_overflow_r;
 
@@ -486,7 +516,7 @@ always @(posedge usb_clk_i) begin
     ts_overflow_r <= 1'b0;
   else if (ts_overflow_w)
     ts_overflow_r <= 1'b1;
-  else if (fifo_commit_w && header_ts_ovf_r)
+  else if (fifo_commit_w && header_ts_ovf_r && (!commit_data_w || !compact_r))
     ts_overflow_r <= 1'b0;
 end
 
@@ -533,16 +563,28 @@ wire [7:0] status_data_w =
   (3'd1 == header_cnt_r) ? header_ts_r[15:8] :
   (3'd2 == header_cnt_r) ? header_ts_r[7:0] : status_w;
 
-wire [7:0] header_data_w =
+wire [1:0] compact_error_w = (overflow_r || raw_overflow_r) ? 2'd3 :
+    data_error_r ? 2'd2 : crc_error_w ? 2'd1 : 2'd0;
+
+wire [7:0] full_header_data_w =
   (3'd0 == header_cnt_r) ? { DATA, toggle_r, 1'b0, header_ts_ovf_r, header_ts_r[19:16] } :
   (3'd1 == header_cnt_r) ? header_ts_r[15:8] :
   (3'd2 == header_cnt_r) ? header_ts_r[7:0] :
-  (3'd3 == header_cnt_r) ? { 2'b00, data_error_r, crc_error_w, overflow_r, data_size_r[10:8] } :
+  (3'd3 == header_cnt_r) ? { 1'b0, raw_overflow_r, data_error_r, crc_error_w,
+      overflow_r, data_size_r[10:8] } :
   (3'd4 == header_cnt_r) ? data_size_r[7:0] :
   (3'd5 == header_cnt_r) ? header_duration_r[15:8] : header_duration_r[7:0];
 
+wire [7:0] compact_header_data_w =
+  (3'd0 == header_cnt_r) ? { DATA, toggle_r, 1'b1, compact_error_w, compact_delta_r[7:5] } :
+  (3'd1 == header_cnt_r) ? { compact_delta_r[4:0], data_size_r[10:8] } :
+  data_size_r[7:0];
+
+wire [7:0] header_data_w = compact_r ? compact_header_data_w : full_header_data_w;
+
 //-----------------------------------------------------------------------------
-wire commit_data_w   = wr_header_w && (header_cnt_r == (DATA_HEADER_SIZE-1'd1));
+wire commit_data_w   = wr_header_w && (header_cnt_r ==
+    ((compact_r ? COMPACT_HEADER_SIZE : DATA_HEADER_SIZE)-1'd1));
 wire commit_status_w = wr_status_w && (header_cnt_r == (STATUS_HEADER_SIZE-1'd1));
 
 //-----------------------------------------------------------------------------
@@ -643,7 +685,8 @@ end
 //-----------------------------------------------------------------------------
 wire [15:0] pid_oh_w = one_hot(pid_r);
 
-wire crc_pid12_w = (data_size_r == (DATA_HEADER_SIZE+1'd1)) ? pid_ok_r : crc5_ok_r;
+wire [10:0] packet_header_size_w = compact_r ? COMPACT_HEADER_SIZE : DATA_HEADER_SIZE;
+wire crc_pid12_w = (data_size_r == (packet_header_size_w+1'd1)) ? pid_ok_r : crc5_ok_r;
 
 wire [15:0] crc_w = { crc16_ok_r, pid_ok_r, crc5_ok_r, crc_pid12_w, crc16_ok_r,
     pid_ok_r, crc5_ok_r, crc5_ok_r, crc16_ok_r, pid_ok_r, crc5_ok_r, crc5_ok_r,

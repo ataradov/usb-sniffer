@@ -359,6 +359,7 @@ void usb_ctrl_init(void)
   usb_ctrl(CaptureCtrl_Reset,  1);
   usb_ctrl(CaptureCtrl_Enable, 0);
   usb_ctrl(CaptureCtrl_Test,   0);
+  usb_ctrl(CaptureCtrl_Compact, 0);
   usb_ctrl(CaptureCtrl_Speed0, 1);
   usb_ctrl(CaptureCtrl_Speed0, 0);
   usb_ctrl(CaptureCtrl_Speed1, 1);

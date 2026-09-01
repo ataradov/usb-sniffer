@@ -45,6 +45,21 @@ int main(void)
   assert(effective_capture_speed() == CaptureSpeed_HS);
   assert(usb_interface_id() == CaptureSpeed_HS);
 
+  // A full status header establishes the absolute timestamp. The following
+  // compact one-byte ACK record advances it by ten 60 MHz ticks.
+  capture_header = true;
+  capture_data_ptr = 0;
+  capture_toggle = 0;
+  capture_ts_ticks = 0;
+  const u8 full_status[] = { 0x00, 0x00, 0x64, 0x00 };
+  const u8 compact_ack[] = { 0xe0, 0x50, 0x04, 0xd2 };
+  capture_callback((u8 *)full_status, sizeof(full_status));
+  assert(capture_ts_ticks == 100);
+  capture_callback((u8 *)compact_ack, sizeof(compact_ack));
+  assert(capture_ts_ticks == 110);
+  assert(capture_toggle == 0);
+  assert(capture_header == true);
+
   capture_fold_count = 1;
   capture_fold_buf_ptr = 2;
   capture_fold_buf[0].ts = 100;

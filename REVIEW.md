@@ -72,6 +72,31 @@ expected for this High-Speed link. This points to port-dependent power, ground,
 or signal-integrity sensitivity in the hardware rather than a remaining packet
 filter in the host software. Auto mode selected High-Speed correctly.
 
+## Sustained High-Speed throughput
+
+A 68 MB USB Mass Storage copy exposed a separate sustained-throughput limit.
+The unoptimized stream reported 4,910 formatted-buffer overflows while moving
+the file in about 1.7 seconds. Instrumented headers confirmed that the raw ULPI
+event queue did not overflow; all losses occurred after formatting, when short
+High-Speed bursts temporarily exceeded the approximately 44.4 MB/s FX2-to-PC
+bulk transfer rate.
+
+The final transport keeps the full 8 KiB formatted FIFO and uses compact
+three-byte delta-timestamp headers for packets separated by no more than 255
+ULPI clocks. Longer gaps and old host utilities retain the original seven-byte
+header format. The FX2 slave FIFO clock was raised from 30 to 48 MHz and passes
+FPGA timing, although the measured bulk endpoint rate remains USB-limited at
+44.3-44.5 MB/s. Overflow telemetry now distinguishes the raw event queue from
+the formatted output FIFO.
+
+On the same 68 MB workload, the current best image reduced formatted-buffer
+overflows from 4,910 to 2,137, with zero raw-queue overflows and zero CRC5/CRC16
+errors. This is a material improvement but is not yet a mathematically lossless
+capture at the target device's peak burst rate. Eliminating the remaining loss
+will require more aggressive on-FPGA record compression or external capture
+memory; it cannot be solved by increasing the already fully allocated eight
+MachXO2 EBR blocks.
+
 ## Automated checks
 
 Run on Windows from the repository root:
@@ -82,8 +107,8 @@ Run on Windows from the repository root:
 
 The suite builds the FX2 firmware, checks its code-size limit and serial-number
 placeholder, lints all FPGA RTL, simulates speed detection, trigger filtering,
-and minimum-gap packet reception, and runs host file-I/O and capture-folding
-regression tests.
+minimum-gap packet reception, and dense maximum-packet bursts, and runs host
+file-I/O, compact-header parsing, and capture-folding regression tests.
 
 After programming and physically reconnecting the FX2LP, verify that the fixed
 EP2 standard-request path is running on the hardware with:
