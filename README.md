@@ -117,7 +117,10 @@ the settings dialog:
 ![Wireshark UI](doc/settings.png)
 
 Here you can configure the capture speed, empty frame folding, trigger type and limit
-the number of the captured packets (0 for unlimited).
+the number of the captured packets (0 for unlimited). Auto-detect is the default:
+the FPGA detects Low-, Full- or High-Speed signaling and the extcap program writes
+each packet to a speed-specific PCAPNG interface. Manual speed selection remains
+available for malformed devices or captures that begin after High-Speed negotiation.
 
 After interface is configured, start and stop the capture as with any other interface.
 

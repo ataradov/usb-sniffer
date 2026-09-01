@@ -113,7 +113,7 @@ static void parse_command_line(int argc, char *argv[])
     { 'h', "help",     NULL,     &g_opt.help,     "print this help message and exit" },
 
     {  1, "Capture:", NULL, NULL, NULL },
-    { 's', "speed",    "speed",  &g_opt.speed,      "select USB speed: 'ls', 'fs' (default) or 'hs'" },
+    { 's', "speed",    "speed",  &g_opt.speed,      "select USB speed: 'auto' (default), 'ls', 'fs' or 'hs'" },
     { 'l', "fold",     NULL,     &g_opt.fold_empty, "fold empty frames" },
     { 'n', "limit",    "number", &g_opt.limit,      "limit the number of captured packets" },
     { 't', "trigger",  "type",   &g_opt.trigger,    "capture trigger: 'disabled' (default), 'low', 'high', 'falling' or 'rising'" },
@@ -247,7 +247,9 @@ static void fpga_erase(void)
 static int get_capture_speed(void)
 {
   if (!g_opt.speed)
-    return CaptureSpeed_FS;
+    return CaptureSpeed_Auto;
+  else if (0 == strcmp(g_opt.speed, "auto"))
+    return CaptureSpeed_Auto;
   else if (0 == strcmp(g_opt.speed, "ls"))
     return CaptureSpeed_LS;
   else if (0 == strcmp(g_opt.speed, "fs"))

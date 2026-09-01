@@ -138,8 +138,9 @@ bool capture_extcap_request(void)
   if (g_opt.extcap_config)
   {
     printf("arg {number=0}{call=--speed}{display=Capture Speed}{tooltip=USB capture speed}{type=selector}\n");
+    printf("value {arg=0}{value=auto}{display=Auto-detect}{default=true}\n");
     printf("value {arg=0}{value=ls}{display=Low-Speed}{default=false}\n");
-    printf("value {arg=0}{value=fs}{display=Full-Speed}{default=true}\n");
+    printf("value {arg=0}{value=fs}{display=Full-Speed}{default=false}\n");
     printf("value {arg=0}{value=hs}{display=High-Speed}{default=false}\n");
     printf("arg {number=1}{call=--fold}{display=Fold empty frames}{tooltip=Fold frames that have no data or errors}{type=boolflag}\n");
     printf("arg {number=2}{call=--trigger}{display=Capture Trigger}{tooltip=Condition used to start the capture}{type=selector}\n");
@@ -231,15 +232,40 @@ static void write_file_header(void)
 }
 
 //-----------------------------------------------------------------------------
-static void write_usb_header(void)
+static int effective_capture_speed(void)
+{
+  if (CaptureSpeed_LS <= capture_speed && capture_speed <= CaptureSpeed_HS)
+    return capture_speed;
+
+  // The FPGA uses High-Speed until automatic detection has a definite result.
+  return CaptureSpeed_HS;
+}
+
+//-----------------------------------------------------------------------------
+static int usb_interface_id(void)
+{
+  if (CaptureSpeed_Auto == g_opt.capture_speed)
+    return effective_capture_speed();
+
+  return 0;
+}
+
+//-----------------------------------------------------------------------------
+static int info_interface_id(void)
+{
+  return (CaptureSpeed_Auto == g_opt.capture_speed) ? 3 : 1;
+}
+
+//-----------------------------------------------------------------------------
+static void write_usb_header(int speed)
 {
   int link_type;
 
-  if (CaptureSpeed_LS == g_opt.capture_speed)
+  if (CaptureSpeed_LS == speed)
     link_type = LINKTYPE_USB_2_0_LOW_SPEED;
-  else if (CaptureSpeed_FS == g_opt.capture_speed)
+  else if (CaptureSpeed_FS == speed)
     link_type = LINKTYPE_USB_2_0_FULL_SPEED;
-  else if (CaptureSpeed_HS == g_opt.capture_speed)
+  else if (CaptureSpeed_HS == speed)
     link_type = LINKTYPE_USB_2_0_HIGH_SPEED;
   else
     os_assert(false);
@@ -280,7 +306,7 @@ static void write_packet(u64 ts, u8 *data, int size)
 {
   put_word(6); // Block Type (EPB)
   put_word(0); // Block Total Length (placeholder)
-  put_word(0); // Interface ID
+  put_word(usb_interface_id()); // Interface ID
   put_word(ts >> 32); // Timestamp Upper
   put_word(ts); // Timestamp Lower
   put_word(size); // Captured Packet Length
@@ -300,7 +326,7 @@ static void write_str(u64 ts, u8 *data, int size)
 
   put_word(6); // Block Type (EPB)
   put_word(0); // Block Total Length (placeholder)
-  put_word(1); // Interface ID
+  put_word(info_interface_id()); // Interface ID
   put_word(ts >> 32); // Timestamp Upper
   put_word(ts); // Timestamp Lower
   put_word(sizeof(hdr) + size); // Captured Packet Length
@@ -370,12 +396,12 @@ static void line_state_event(void)
   }
   else if (dp == 0)
   {
-    strcat(str, (CaptureSpeed_LS == g_opt.capture_speed) ? "J" : "K");
+    strcat(str, (CaptureSpeed_LS == effective_capture_speed()) ? "J" : "K");
     level = dm;
   }
   else if (dm == 0)
   {
-    strcat(str, (CaptureSpeed_LS == g_opt.capture_speed) ? "K" : "J");
+    strcat(str, (CaptureSpeed_LS == effective_capture_speed()) ? "K" : "J");
     level = dp;
   }
   else
@@ -464,7 +490,7 @@ static void status_event(int ls, int vbus, int trigger, int speed)
 
     capture_ls = ls;
 
-    if (CaptureSpeed_LS == g_opt.capture_speed && LS_SE0 == capture_saved_ls && LS_J3 == ls &&
+    if (CaptureSpeed_LS == effective_capture_speed() && LS_SE0 == capture_saved_ls && LS_J3 == ls &&
         (MIN_KEEPALIVE_DURATION < delta && delta < MAX_KEEPALIVE_DURATION))
     {
       capture_saved_ls = LS_INVALID;
@@ -568,7 +594,8 @@ static void keepalive_event(u64 ts, int delta)
 static void data_event(void)
 {
   bool data_error = capture_crc_error || capture_data_error;
-  bool allow_sof  = (CaptureSpeed_LS != g_opt.capture_speed);
+  int speed = effective_capture_speed();
+  bool allow_sof  = (CaptureSpeed_LS != speed);
   int pid = capture_data[0];
 
   if (!capture_enabled)
@@ -600,7 +627,7 @@ static void data_event(void)
       capture_fold_count++;
       capture_fold_buf_ptr = 0;
 
-      if (capture_fold_count == ((CaptureSpeed_HS == g_opt.capture_speed) ? FOLD_LIMIT_HS : FOLD_LIMIT_LS_FS))
+      if (capture_fold_count == ((CaptureSpeed_HS == speed) ? FOLD_LIMIT_HS : FOLD_LIMIT_LS_FS))
         stop_folding();
 
       fold_packet(capture_ts, capture_data, capture_size);
@@ -766,7 +793,14 @@ bool capture_start(void)
   log_print("Starting capture");
 
   write_file_header();
-  write_usb_header();
+  if (CaptureSpeed_Auto == g_opt.capture_speed)
+  {
+    write_usb_header(CaptureSpeed_LS);
+    write_usb_header(CaptureSpeed_FS);
+    write_usb_header(CaptureSpeed_HS);
+  }
+  else
+    write_usb_header(g_opt.capture_speed);
   write_info_header();
 
   if (CaptureTrigger_Disabled == g_opt.capture_trigger)

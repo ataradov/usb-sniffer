@@ -29,10 +29,21 @@ int main(void)
   capture_fd = tmpfile();
   assert(capture_fd != NULL);
 
-  g_opt.capture_speed = CaptureSpeed_HS;
+  g_opt.capture_speed = CaptureSpeed_Auto;
   write_file_header();
-  write_usb_header();
+  write_usb_header(CaptureSpeed_LS);
+  write_usb_header(CaptureSpeed_FS);
+  write_usb_header(CaptureSpeed_HS);
   write_info_header();
+
+  capture_speed = CaptureSpeed_FS;
+  assert(effective_capture_speed() == CaptureSpeed_FS);
+  assert(usb_interface_id() == CaptureSpeed_FS);
+  assert(info_interface_id() == 3);
+
+  capture_speed = CaptureSpeed_Reset;
+  assert(effective_capture_speed() == CaptureSpeed_HS);
+  assert(usb_interface_id() == CaptureSpeed_HS);
 
   capture_fold_count = 1;
   capture_fold_buf_ptr = 2;

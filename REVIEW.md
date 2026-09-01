@@ -22,6 +22,9 @@ firmware and FPGA RTL.
 - Fixed the FPGA trigger filter constant (`6'h60` was truncated to 6'h20).
 - Added deterministic reset behavior to the FPGA speed detector and comparator
   hysteresis state.
+- Exposed the FPGA automatic speed mode in the CLI and Wireshark extcap UI.
+  Auto mode uses separate Low-, Full- and High-Speed PCAPNG interfaces so the
+  Wireshark USB link-layer dissector receives the detected speed per packet.
 
 ## High-Speed capture investigation
 
