@@ -60,6 +60,19 @@ int main(void)
   assert(capture_toggle == 0);
   assert(capture_header == true);
 
+  // Hardware-fold summaries are status-like seven-byte records.  They carry
+  // an absolute timestamp and must keep the stream toggle synchronized.
+  capture_header = true;
+  capture_data_ptr = 0;
+  capture_toggle = 0;
+  capture_ts_ticks = 0;
+  const u8 fold_summary[] = { 0x20, 0x00, 0x78, 0x00, 0x03, 0x00, 0x02 };
+  capture_callback((u8 *)fold_summary, sizeof(fold_summary));
+  assert(capture_fold_summary == true);
+  assert(capture_ts_ticks == 120);
+  assert(capture_toggle == 1);
+  assert(capture_header == true);
+
   capture_fold_count = 1;
   capture_fold_buf_ptr = 2;
   capture_fold_buf[0].ts = 100;

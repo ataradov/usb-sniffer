@@ -87,6 +87,7 @@ wire enable_w = ctrl_w[1];
 wire [1:0] speed_w = { ctrl_w[3], ctrl_w[2] };
 wire test_w   = ctrl_w[4];
 wire compact_w = ctrl_w[5];
+wire hardware_fold_w = ctrl_w[6];
 
 //-----------------------------------------------------------------------------
 wire [7:0] capture_data_w;
@@ -112,6 +113,7 @@ usb_capture usb_capture_inst (
   .ctrl_enable_i   (enable_w),
   .ctrl_speed_i    (speed_w),
   .ctrl_compact_i  (compact_w),
+  .ctrl_fold_i     (hardware_fold_w),
 
   .trigger_i       (trigger_w)
 );

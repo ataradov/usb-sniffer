@@ -189,8 +189,17 @@ The output is `bin\usb_sniffer_impl.bit`. Test it without changing FPGA flash:
 .\software\usb_sniffer.exe --fpga-sram .\bin\usb_sniffer_impl.bit
 ```
 
-The open-source flow currently produces an SRAM BIT image, not the JED image
-accepted by this project's permanent flash programmer. Power cycling restores
-the image already stored in FPGA flash. A permanent update still requires a
-Diamond-generated JED file.
+The open-source flow produces a BIT image without requiring a Lattice Diamond
+license. This project's built-in programmer accepts JED for permanent flash, so
+`--fpga-sram` remains the safe update path through the board's FX2 USB
+connection. MachXO2 BIT files can also be written permanently with
+[openFPGALoader](https://trabucayre.github.io/openFPGALoader/vendors/lattice.html)
+and a supported external JTAG adapter:
+
+```powershell
+openFPGALoader -c <cable> -f .\bin\usb_sniffer_impl.bit
+```
+
+Power cycling after an SRAM-only test restores the image already stored in FPGA
+flash. Verify the exact cable wiring and detected FPGA ID before using `-f`.
 

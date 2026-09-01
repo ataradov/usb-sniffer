@@ -79,6 +79,15 @@ if ($LASTEXITCODE) { throw 'USB capture burst simulation build failed' }
 & $vvp (Join-Path $PSScriptRoot 'usb_capture_burst_tb.vvp')
 if ($LASTEXITCODE) { throw 'USB capture burst simulation failed' }
 
+& $iverilog -g2012 -Wall -s usb_capture_fold_tb -o (Join-Path $PSScriptRoot 'usb_capture_fold_tb.vvp') `
+  (Join-Path $PSScriptRoot 'usb_capture_fold_tb.v') `
+  (Join-Path $projectRoot 'fpga\usb_capture.v') `
+  (Join-Path $projectRoot 'fpga\usb_phy.v') `
+  (Join-Path $projectRoot 'fpga\speed_detect.v')
+if ($LASTEXITCODE) { throw 'USB capture fold simulation build failed' }
+& $vvp (Join-Path $PSScriptRoot 'usb_capture_fold_tb.vvp')
+if ($LASTEXITCODE) { throw 'USB capture fold simulation failed' }
+
 & $iverilog -g2012 -Wall -s fifo_sync_tb -o (Join-Path $PSScriptRoot 'fifo_sync_tb.vvp') `
   (Join-Path $PSScriptRoot 'fifo_sync_tb.v') (Join-Path $projectRoot 'fpga\fifo_sync.v')
 if ($LASTEXITCODE) { throw 'FIFO simulation build failed' }

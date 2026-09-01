@@ -22,6 +22,7 @@ module usb_capture (
   input         ctrl_enable_i,
   input   [1:0] ctrl_speed_i,
   input         ctrl_compact_i,
+  input         ctrl_fold_i,
 
   input         trigger_i
 );
@@ -196,7 +197,8 @@ localparam
   ST_DATA     = 3'd1,
   ST_DATA_OVF = 3'd2,
   ST_HEADER   = 3'd3,
-  ST_OVERFLOW = 3'd4;
+  ST_OVERFLOW = 3'd4,
+  ST_PENDING  = 3'd5;
 
 reg  [2:0] state_r;
 reg [10:0] data_size_r;
@@ -208,13 +210,37 @@ reg        pid_ok_r;
 reg  [3:0] pid_r;
 reg        compact_r;
 reg  [7:0] compact_delta_r;
+reg [PTR_WIDTH-1:0] packet_base_ptr_r;
+reg  [7:0] packet_prefix_r [0:2];
+
+reg        pending_valid_r;
+reg        pending_compact_r;
+reg  [7:0] pending_delta_r;
+reg [10:0] pending_size_r;
+reg [19:0] pending_ts_r;
+reg        pending_ts_ovf_r;
+reg [15:0] pending_duration_r;
+reg  [3:0] pending_cnt_r;
+reg  [7:0] pending_data_r [0:2];
+
+reg [15:0] fold_sof_count_r;
+reg [15:0] fold_nak_count_r;
+reg [19:0] fold_ts_r;
+reg        fold_ts_ovf_r;
 
 reg [19:0] last_header_ts_r;
 reg        last_header_valid_r;
 
-wire [19:0] compact_delta_w = raw_event_timestamp_w - last_header_ts_r;
-wire compact_start_w = ctrl_compact_i && last_header_valid_r &&
+wire [19:0] compact_base_ts_w = pending_valid_r ? pending_ts_r : last_header_ts_r;
+wire compact_base_valid_w = pending_valid_r || last_header_valid_r;
+wire [19:0] compact_delta_w = raw_event_timestamp_w - compact_base_ts_w;
+wire compact_start_w = ctrl_compact_i && compact_base_valid_w &&
     (compact_delta_w <= 20'd255);
+
+wire [10:0] packet_header_size_w = compact_r ? COMPACT_HEADER_SIZE : DATA_HEADER_SIZE;
+wire [10:0] packet_raw_size_w = data_size_r - packet_header_size_w;
+wire packet_clean_w = !data_error_r && !raw_event_error_w && !overflow_r &&
+    !raw_overflow_r && !crc_error_w;
 
 wire raw_pop_w = raw_valid_w &&
     ((ST_IDLE == state_r) || (ST_DATA == state_r) || (ST_DATA_OVF == state_r) ||
@@ -231,18 +257,32 @@ always @(posedge usb_clk_i) begin
     pid_r        <= 4'h0;
     compact_r    <= 1'b0;
     compact_delta_r <= 8'h0;
+    packet_base_ptr_r <= { PTR_WIDTH{1'b0} };
+    pending_valid_r <= 1'b0;
+    pending_cnt_r <= 4'h0;
+    fold_sof_count_r <= 16'h0;
+    fold_nak_count_r <= 16'h0;
+    fold_ts_r <= 20'h0;
+    fold_ts_ovf_r <= 1'b0;
     state_r      <= ST_IDLE;
   end else case (state_r)
     ST_IDLE: begin
       data_size_r <= STATUS_HEADER_SIZE;
 
-      if (raw_valid_w && raw_type_w == RAW_START && ctrl_enable_i) begin
+      if (commit_fold_w) begin
+        fold_sof_count_r <= 16'h0;
+        fold_nak_count_r <= 16'h0;
+      end else if (raw_valid_w && raw_type_w == RAW_START && ctrl_enable_i) begin
         data_size_r  <= compact_start_w ? COMPACT_HEADER_SIZE : DATA_HEADER_SIZE;
         data_error_r <= 1'b0;
         pid_rx_r     <= 1'b0;
         compact_r    <= compact_start_w;
         compact_delta_r <= compact_delta_w[7:0];
-        state_r      <= fifo_ready_w ? ST_DATA : ST_OVERFLOW;
+        // Register the reserved-record offset once at packet start.  Keeping
+        // two adders out of the per-byte FIFO write/overflow path is required
+        // to meet the 60 MHz ULPI clock.
+        packet_base_ptr_r <= fifo_wr_ptr_r + (pending_valid_r ? pending_size_r : 11'h0);
+        state_r      <= fifo_packet_ready_w ? ST_DATA : ST_OVERFLOW;
       end else if (raw_valid_w && raw_type_w == RAW_OVERFLOW) begin
         overflow_r <= 1'b1;
         raw_overflow_r <= 1'b1;
@@ -252,13 +292,39 @@ always @(posedge usb_clk_i) begin
     ST_DATA: begin
       if (raw_valid_w && raw_type_w == RAW_STOP) begin
         data_error_r <= data_error_r | raw_event_error_w;
-        state_r <= ST_HEADER;
+        if (ctrl_fold_i && !pending_valid_r && packet_clean_w && pid_r == 4'h5) begin
+          if (fold_sof_count_r != 16'hffff)
+            fold_sof_count_r <= fold_sof_count_r + 16'd1;
+          { fold_ts_r, fold_ts_ovf_r } <= { header_ts_r, header_ts_ovf_r };
+          state_r <= ST_IDLE;
+        end else if (ctrl_fold_i && !pending_valid_r && packet_clean_w &&
+            pid_r == 4'h9 && packet_raw_size_w == 11'd3) begin
+          pending_valid_r <= 1'b1;
+          pending_compact_r <= compact_r;
+          pending_delta_r <= compact_delta_r;
+          pending_size_r <= data_size_r;
+          pending_ts_r <= header_ts_r;
+          pending_ts_ovf_r <= header_ts_ovf_r;
+          pending_duration_r <= raw_event_duration_w;
+          pending_data_r[0] <= packet_prefix_r[0];
+          pending_data_r[1] <= packet_prefix_r[1];
+          pending_data_r[2] <= packet_prefix_r[2];
+          state_r <= ST_IDLE;
+        end else if (ctrl_fold_i && pending_valid_r && packet_clean_w &&
+            pid_r == 4'ha && packet_raw_size_w == 11'd1) begin
+          pending_valid_r <= 1'b0;
+          if (fold_nak_count_r != 16'hffff)
+            fold_nak_count_r <= fold_nak_count_r + 16'd1;
+          { fold_ts_r, fold_ts_ovf_r } <= { header_ts_r, header_ts_ovf_r };
+          state_r <= ST_IDLE;
+        end else begin
+          pending_cnt_r <= 4'h0;
+          state_r <= pending_valid_r ? ST_PENDING : ST_HEADER;
+        end
       end else if (raw_valid_w && raw_type_w == RAW_OVERFLOW) begin
         overflow_r <= 1'b1;
         raw_overflow_r <= 1'b1;
         state_r <= ST_IDLE;
-      end else if (fifo_overflow_w && wr_data_w) begin
-        state_r <= ST_OVERFLOW;
       end else if (data_size_r == 11'd1280) begin
         state_r <= ST_DATA_OVF;
       end else if (wr_data_w)
@@ -270,8 +336,12 @@ always @(posedge usb_clk_i) begin
         pid_r    <= raw_event_data_w[3:0];
       end
 
+      if (wr_data_w && packet_raw_size_w < 11'd3)
+        packet_prefix_r[packet_raw_size_w[1:0]] <= raw_event_data_w;
+
       if (wr_data_w && raw_event_error_w)
         data_error_r <= 1'b1;
+
     end
 
     ST_DATA_OVF: begin
@@ -284,7 +354,23 @@ always @(posedge usb_clk_i) begin
       if (commit_data_w) begin
         overflow_r <= 1'b0;
         raw_overflow_r <= 1'b0;
+        pending_valid_r <= 1'b0;
         state_r <= ST_IDLE;
+      end
+    end
+
+    ST_PENDING: begin
+      // Reaching this state means the current packet (written after the
+      // reserved pending record) already fitted in the FIFO.  Rechecking the
+      // pointer here creates a long count -> address -> overflow -> state path
+      // and cannot add safety.
+      if (wr_pending_w) begin
+        if (pending_cnt_r == (pending_size_r-1'd1)) begin
+          pending_cnt_r <= 4'h0;
+          state_r <= ST_HEADER;
+        end else begin
+          pending_cnt_r <= pending_cnt_r + 4'd1;
+        end
       end
     end
 
@@ -470,7 +556,7 @@ end
 reg [2:0] header_cnt_r;
 
 always @(posedge usb_clk_i) begin
-  if (wr_status_w || wr_header_w)
+  if (wr_status_w || wr_header_w || wr_fold_w)
     header_cnt_r <= header_cnt_r + 3'd1;
   else
     header_cnt_r <= 3'd0;
@@ -482,7 +568,7 @@ reg toggle_r;
 always @(posedge usb_clk_i) begin
   if (reset_i || !ctrl_enable_i)
     toggle_r <= 1'b0;
-  else if (fifo_commit_w)
+  else if (fifo_commit_w && !(commit_data_w && pending_valid_r))
     toggle_r <= !toggle_r;
 end
 
@@ -503,7 +589,7 @@ always @(posedge usb_clk_i) begin
     last_header_ts_r <= 20'h0;
     last_header_valid_r <= 1'b0;
   end else if (fifo_commit_w) begin
-    last_header_ts_r <= header_ts_r;
+    last_header_ts_r <= commit_fold_w ? fold_ts_r : header_ts_r;
     last_header_valid_r <= 1'b1;
   end
 end
@@ -516,7 +602,8 @@ always @(posedge usb_clk_i) begin
     ts_overflow_r <= 1'b0;
   else if (ts_overflow_w)
     ts_overflow_r <= 1'b1;
-  else if (fifo_commit_w && header_ts_ovf_r && (!commit_data_w || !compact_r))
+  else if ((commit_fold_w && fold_ts_ovf_r) ||
+      (fifo_commit_w && header_ts_ovf_r && (!commit_data_w || !compact_r)))
     ts_overflow_r <= 1'b0;
 end
 
@@ -566,8 +653,10 @@ wire [7:0] status_data_w =
 wire [1:0] compact_error_w = (overflow_r || raw_overflow_r) ? 2'd3 :
     data_error_r ? 2'd2 : crc_error_w ? 2'd1 : 2'd0;
 
+wire current_toggle_w = toggle_r ^ pending_valid_r;
+
 wire [7:0] full_header_data_w =
-  (3'd0 == header_cnt_r) ? { DATA, toggle_r, 1'b0, header_ts_ovf_r, header_ts_r[19:16] } :
+  (3'd0 == header_cnt_r) ? { DATA, current_toggle_w, 1'b0, header_ts_ovf_r, header_ts_r[19:16] } :
   (3'd1 == header_cnt_r) ? header_ts_r[15:8] :
   (3'd2 == header_cnt_r) ? header_ts_r[7:0] :
   (3'd3 == header_cnt_r) ? { 1'b0, raw_overflow_r, data_error_r, crc_error_w,
@@ -576,37 +665,87 @@ wire [7:0] full_header_data_w =
   (3'd5 == header_cnt_r) ? header_duration_r[15:8] : header_duration_r[7:0];
 
 wire [7:0] compact_header_data_w =
-  (3'd0 == header_cnt_r) ? { DATA, toggle_r, 1'b1, compact_error_w, compact_delta_r[7:5] } :
+  (3'd0 == header_cnt_r) ? { DATA, current_toggle_w, 1'b1, compact_error_w, compact_delta_r[7:5] } :
   (3'd1 == header_cnt_r) ? { compact_delta_r[4:0], data_size_r[10:8] } :
   data_size_r[7:0];
 
 wire [7:0] header_data_w = compact_r ? compact_header_data_w : full_header_data_w;
 
+wire [7:0] pending_full_header_data_w =
+  (pending_cnt_r == 4'd0) ? { DATA, toggle_r, 1'b0, pending_ts_ovf_r, pending_ts_r[19:16] } :
+  (pending_cnt_r == 4'd1) ? pending_ts_r[15:8] :
+  (pending_cnt_r == 4'd2) ? pending_ts_r[7:0] :
+  (pending_cnt_r == 4'd3) ? { 5'b00000, pending_size_r[10:8] } :
+  (pending_cnt_r == 4'd4) ? pending_size_r[7:0] :
+  (pending_cnt_r == 4'd5) ? pending_duration_r[15:8] : pending_duration_r[7:0];
+
+wire [7:0] pending_compact_header_data_w =
+  (pending_cnt_r == 4'd0) ? { DATA, toggle_r, 1'b1, 2'b00, pending_delta_r[7:5] } :
+  (pending_cnt_r == 4'd1) ? { pending_delta_r[4:0], pending_size_r[10:8] } :
+  pending_size_r[7:0];
+
+wire [3:0] pending_header_size_w = pending_compact_r ? COMPACT_HEADER_SIZE : DATA_HEADER_SIZE;
+wire [3:0] pending_data_index_w = pending_cnt_r - pending_header_size_w;
+wire [7:0] pending_payload_data_w =
+  (pending_data_index_w == 4'd0) ? pending_data_r[0] :
+  (pending_data_index_w == 4'd1) ? pending_data_r[1] : pending_data_r[2];
+wire [7:0] pending_record_data_w = (pending_cnt_r < pending_header_size_w) ?
+    (pending_compact_r ? pending_compact_header_data_w : pending_full_header_data_w) :
+    pending_payload_data_w;
+
+wire [7:0] fold_data_w =
+  (header_cnt_r == 3'd0) ? { STATUS, toggle_r, 1'b1, fold_ts_ovf_r, fold_ts_r[19:16] } :
+  (header_cnt_r == 3'd1) ? fold_ts_r[15:8] :
+  (header_cnt_r == 3'd2) ? fold_ts_r[7:0] :
+  (header_cnt_r == 3'd3) ? fold_sof_count_r[15:8] :
+  (header_cnt_r == 3'd4) ? fold_sof_count_r[7:0] :
+  (header_cnt_r == 3'd5) ? fold_nak_count_r[15:8] : fold_nak_count_r[7:0];
+
 //-----------------------------------------------------------------------------
 wire commit_data_w   = wr_header_w && (header_cnt_r ==
     ((compact_r ? COMPACT_HEADER_SIZE : DATA_HEADER_SIZE)-1'd1));
 wire commit_status_w = wr_status_w && (header_cnt_r == (STATUS_HEADER_SIZE-1'd1));
+wire commit_fold_w = wr_fold_w && (header_cnt_r == 3'd6);
 
 //-----------------------------------------------------------------------------
-wire wr_status_w = (ST_IDLE == state_r && !raw_valid_w &&
+wire fold_pending_w = (fold_sof_count_r != 16'h0) || (fold_nak_count_r != 16'h0);
+wire wr_fold_w = (ST_IDLE == state_r && !raw_valid_w && !pending_valid_r &&
+    fold_pending_w && fifo_ready_w && ctrl_enable_i);
+wire wr_status_w = (ST_IDLE == state_r && !raw_valid_w && !pending_valid_r && !fold_pending_w &&
     (status_pending_r || ts_pending_r) && fifo_ready_w && ctrl_enable_i);
 wire wr_header_w = (ST_HEADER == state_r);
 wire wr_data_w   = (ST_DATA == state_r && raw_valid_w && raw_type_w == RAW_DATA);
+wire wr_pending_w = (ST_PENDING == state_r);
 
 // Calculate both addresses in parallel. Selecting the offset before the adder
 // puts state decoding on a long carry-chain path and misses the 60 MHz timing.
-wire [PTR_WIDTH-1:0] fifo_wr_data_ptr_w = fifo_wr_ptr_r + data_size_r;
-wire [PTR_WIDTH-1:0] fifo_wr_header_ptr_w = fifo_wr_ptr_r + header_cnt_r;
+wire [PTR_WIDTH-1:0] fifo_wr_data_ptr_w = packet_base_ptr_r + data_size_r;
+wire [PTR_WIDTH-1:0] fifo_wr_header_ptr_w = packet_base_ptr_r + header_cnt_r;
+wire [PTR_WIDTH-1:0] fifo_wr_pending_ptr_w = fifo_wr_ptr_r + pending_cnt_r;
+wire [PTR_WIDTH-1:0] fifo_wr_meta_ptr_w = fifo_wr_ptr_r + header_cnt_r;
 wire [PTR_WIDTH-1:0] fifo_wr_ptr_w =
-    (ST_DATA == state_r) ? fifo_wr_data_ptr_w : fifo_wr_header_ptr_w;
-wire fifo_wr_w = (wr_status_w || wr_data_w || wr_header_w) && !fifo_overflow_w;
-wire fifo_commit_w = commit_status_w || commit_data_w;
+    (ST_DATA == state_r) ? fifo_wr_data_ptr_w :
+    (ST_PENDING == state_r) ? fifo_wr_pending_ptr_w :
+    (ST_HEADER == state_r) ? fifo_wr_header_ptr_w : fifo_wr_meta_ptr_w;
+wire fifo_wr_w = wr_status_w || wr_fold_w || wr_data_w || wr_header_w || wr_pending_w;
+wire fifo_commit_w = commit_status_w || commit_fold_w || commit_data_w;
+
+wire [12:0] fifo_commit_size_w = commit_status_w ? STATUS_HEADER_SIZE :
+    commit_fold_w ? 13'd7 : data_size_r + (pending_valid_r ? pending_size_r : 11'h0);
 
 wire [7:0] fifo_data_w =
   wr_status_w ? status_data_w :
+  wr_fold_w ? fold_data_w :
+  wr_pending_w ? pending_record_data_w :
   wr_header_w ? header_data_w : raw_event_data_w;
 
 wire fifo_ready_w = (fifo_size_r > 5'd31);
+// Reserve enough room before accepting a packet.  The capture record is capped
+// at 1280 bytes and a deferred IN record is at most 10 bytes.  This makes a
+// mid-packet FIFO collision impossible without a per-byte wide comparator.
+// A power-of-two threshold maps to three high bits instead of a 14-bit
+// comparator.  2048 bytes still exceeds the 1290-byte worst-case record.
+wire fifo_packet_ready_w = |fifo_size_r[PTR_WIDTH:11];
 
 //-----------------------------------------------------------------------------
 reg           [7:0] fifo_mem_r [0:FIFO_SIZE-1];
@@ -615,15 +754,13 @@ reg [PTR_WIDTH-1:0] fifo_wr_ptr_r;
 reg [PTR_WIDTH-1:0] fifo_rd_ptr_r;
 reg   [PTR_WIDTH:0] fifo_size_r;
 
-wire fifo_overflow_w = (fifo_wr_ptr_w == fifo_rd_ptr_r) && !fifo_empty_w;
-
 always @(posedge usb_clk_i) begin
   if (reset_i)
     fifo_size_r <= FIFO_SIZE;
   else case ({ fifo_commit_w, (int_valid_o && int_ack_i) })
-    2'b10: fifo_size_r <= fifo_size_r - data_size_r;
+    2'b10: fifo_size_r <= fifo_size_r - fifo_commit_size_w;
     2'b01: fifo_size_r <= fifo_size_r + 1'd1;
-    2'b11: fifo_size_r <= fifo_size_r - data_size_r + 1'd1;
+    2'b11: fifo_size_r <= fifo_size_r - fifo_commit_size_w + 1'd1;
     default: fifo_size_r <= fifo_size_r;
   endcase
 end
@@ -632,7 +769,7 @@ always @(posedge usb_clk_i) begin
   if (reset_i)
     fifo_wr_ptr_r <= 1'd0;
   else if (fifo_commit_w)
-    fifo_wr_ptr_r <= fifo_wr_ptr_r + data_size_r;
+    fifo_wr_ptr_r <= fifo_wr_ptr_r + fifo_commit_size_w;
 end
 
 always @(posedge usb_clk_i) begin
@@ -685,7 +822,6 @@ end
 //-----------------------------------------------------------------------------
 wire [15:0] pid_oh_w = one_hot(pid_r);
 
-wire [10:0] packet_header_size_w = compact_r ? COMPACT_HEADER_SIZE : DATA_HEADER_SIZE;
 wire crc_pid12_w = (data_size_r == (packet_header_size_w+1'd1)) ? pid_ok_r : crc5_ok_r;
 
 wire [15:0] crc_w = { crc16_ok_r, pid_ok_r, crc5_ok_r, crc_pid12_w, crc16_ok_r,

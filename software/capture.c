@@ -24,6 +24,7 @@
 #define DATA_HEADER_SIZE               7
 #define COMPACT_DATA_HEADER_SIZE       3
 #define STATUS_HEADER_SIZE             4
+#define FOLD_SUMMARY_SIZE              7
 #define DATA_BUF_SIZE                  2048
 #define FOLD_BUF_SIZE                  256
 #define MAX_DATA_SIZE                  1280
@@ -80,6 +81,7 @@ static int  capture_data_ptr   = 0;
 static int  capture_size       = 0;
 static bool capture_header     = true;
 static bool capture_status     = false;
+static bool capture_fold_summary = false;
 static int  capture_toggle     = 0;
 static int  capture_ls         = -1;
 static int  capture_vbus       = -1;
@@ -703,7 +705,9 @@ static inline void capture_sm(u8 byte)
   if (capture_header && 0 == capture_data_ptr)
   {
     capture_status = (0 == (byte & HEADER_STATUS));
-    capture_size   = capture_status ? STATUS_HEADER_SIZE :
+    capture_fold_summary = capture_status && (byte & HEADER_ZERO);
+    capture_size   = capture_fold_summary ? FOLD_SUMMARY_SIZE :
+        capture_status ? STATUS_HEADER_SIZE :
         ((byte & HEADER_COMPACT) ? COMPACT_DATA_HEADER_SIZE : DATA_HEADER_SIZE);
   }
 
@@ -716,7 +720,7 @@ static inline void capture_sm(u8 byte)
   {
     int toggle = (capture_data[0] & HEADER_TOGGLE) ? 1 : 0;
     bool compact = !capture_status && (capture_data[0] & HEADER_COMPACT);
-    int zero   = (!compact && (capture_data[0] & HEADER_ZERO)) ? 1 : 0;
+    int zero   = (!compact && !capture_fold_summary && (capture_data[0] & HEADER_ZERO)) ? 1 : 0;
 
     check_header(toggle, zero);
 
@@ -744,7 +748,15 @@ static inline void capture_sm(u8 byte)
     if ((capture_ts - capture_last_ts) > UPDATE_INTERVAL)
       timeout_event();
 
-    if (capture_status)
+    if (capture_fold_summary)
+    {
+      int sof_count = (capture_data[3] << 8) | capture_data[4];
+      int nak_count = (capture_data[5] << 8) | capture_data[6];
+
+      if (capture_enabled)
+        capture_info(capture_ts, "FPGA folded %d SOF and %d IN/NAK transactions", sof_count, nak_count);
+    }
+    else if (capture_status)
     {
       int ls      = (capture_data[3] >> HEADER_LS_OFFS) & HEADER_LS_MASK;
       int vbus    = (capture_data[3] & HEADER_VBUS) ? 1 : 0;
@@ -823,6 +835,7 @@ bool capture_start(void)
   usb_ctrl(CaptureCtrl_Speed0, g_opt.capture_speed & 1);
   usb_ctrl(CaptureCtrl_Speed1, g_opt.capture_speed & 2);
   usb_ctrl(CaptureCtrl_Compact, 1);
+  usb_ctrl(CaptureCtrl_HardwareFold, g_opt.fold_empty);
 
   usb_ctrl(CaptureCtrl_Reset, 0);
   usb_ctrl(CaptureCtrl_Enable, 1);

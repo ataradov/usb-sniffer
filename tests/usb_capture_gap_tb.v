@@ -31,6 +31,7 @@ module usb_capture_gap_tb;
     .ctrl_enable_i(1'b1),
     .ctrl_speed_i(2'b10),
     .ctrl_compact_i(1'b1),
+    .ctrl_fold_i(1'b0),
     .trigger_i(1'b0)
   );
 
