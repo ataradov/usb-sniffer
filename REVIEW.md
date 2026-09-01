@@ -25,6 +25,9 @@ firmware and FPGA RTL.
 - Exposed the FPGA automatic speed mode in the CLI and Wireshark extcap UI.
   Auto mode uses separate Low-, Full- and High-Speed PCAPNG interfaces so the
   Wireshark USB link-layer dissector receives the detected speed per packet.
+- Made speed detection recover from transient comparator levels and recognize
+  the High-Speed device chirp after an initial Full-Speed classification.
+  A real phone capture now reports `Detected speed: High-Speed` in auto mode.
 
 ## High-Speed capture investigation
 
@@ -38,6 +41,12 @@ test validates the FPGA-to-FX2-to-PC data path, but does not exercise reception
 through the USB3343 target PHY. Remaining likely causes are therefore the
 USB3343/ULPI receive path or High-Speed electrical signal integrity. No
 unproven change to that receive state machine is included in this patch set.
+
+The repaired auto-speed FPGA image was built with the open-source
+Yosys/nextpnr/Project Trellis flow and loaded into SRAM. A 20,000-packet phone
+capture decoded enumeration descriptors and reproduced the remaining issue:
+391 sequence warnings were ACK handshakes without the corresponding device DATA
+packet. This further separates the receive-path problem from speed selection.
 
 ## Automated checks
 

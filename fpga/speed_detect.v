@@ -100,8 +100,17 @@ always @(posedge clk_i) begin
     end else if ((dm_r == 2'd2) && (dp_r == 2'd0)) begin
       state_r <= ST_HS_WAIT;
     end else begin
-      state_r <= ST_IDLE;
+      // Comparator levels can be temporarily inconsistent while a device is
+      // attached. Keep looking instead of permanently abandoning detection.
+      state_r <= ST_WAIT;
     end
+  end else if (ST_IDLE == state_r) begin
+    // A High-Speed capable device initially attaches as Full-Speed and only
+    // emits chirp K after the host starts reset. The reset detector may miss
+    // that transition when the comparator levels are changing, so recognize
+    // the device chirp even after Full-Speed has already been selected.
+    if ((dm_r == 2'd2) && (dp_r == 2'd0))
+      state_r <= ST_HS_WAIT;
   end else if (ST_HS_WAIT == state_r) begin
     if ((dm_r == 2'd1) || (dp_r == 2'd1)) begin
       speed_r <= USB_SPEED_HS;

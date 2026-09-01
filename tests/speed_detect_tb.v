@@ -21,6 +21,16 @@ module speed_detect_tb;
 
   always #5 clk = !clk;
 
+  task hold_lines;
+    input [1:0] new_dm;
+    input [1:0] new_dp;
+    begin
+      dm <= new_dm;
+      dp <= new_dp;
+      repeat (80) @(posedge clk);
+    end
+  endtask
+
   initial begin
     repeat (4) @(posedge clk);
     reset <= 0;
@@ -37,6 +47,20 @@ module speed_detect_tb;
     repeat (2) @(posedge clk);
     if (speed !== 2'b11) begin
       $display("Reset did not restore unknown speed, got %b", speed);
+      $fatal(1);
+    end
+
+    // Sequence observed on a real High-Speed phone connection: a transient
+    // mixed comparator level, Full-Speed idle, device chirp K, then host
+    // chirps. Detection must recover from the transient and upgrade FS to HS.
+    reset <= 0;
+    hold_lines(2'd1, 2'd3);
+    hold_lines(2'd0, 2'd3);
+    hold_lines(2'd2, 2'd0);
+    hold_lines(2'd0, 2'd1);
+
+    if (speed !== 2'b10) begin
+      $display("Expected High-Speed after chirp sequence, got %b", speed);
       $fatal(1);
     end
 

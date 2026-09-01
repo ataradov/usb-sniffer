@@ -95,7 +95,8 @@ It is a good idea to run this test after significant changes to the hardware set
 ## Installation
 
 Pre-built binaries are provided for [Linux](bin/usb_sniffer_linux) and
-[Windows](bin/usb_sniffer_win.exe).
+[Windows](bin/usb_sniffer_win.exe). Windows users can alternatively run the
+[Wireshark plugin installer](bin/USB-Sniffer-Wireshark-Plugin-Setup.exe).
 
 To use with Wireshark, copy the file into the extcap plugin directory. Typical
 locations are `~/.local/lib/wireshark/extcap` on Linux, and
@@ -159,5 +160,33 @@ Create the Windows Wireshark extcap installer after building the host executable
 ```
 
 The installer is written to `dist\USB-Sniffer-Wireshark-Plugin-Setup.exe`.
+
+## FPGA build without a Lattice account
+
+The FPGA can be built with Yosys, Project Trellis and nextpnr. The regular OSS
+CAD Suite binary omits the MachXO2-2000 chip database, so first build the small
+device-specific WSL tool once:
+
+```powershell
+.\scripts\build-nextpnr-machxo2-2000-wsl.ps1
+```
+
+Install/extract OSS CAD Suite under `tools\oss-cad-suite\oss-cad-suite`, then
+build the FPGA image:
+
+```powershell
+.\scripts\build-fpga-oss.ps1
+```
+
+The output is `bin\usb_sniffer_impl.bit`. Test it without changing FPGA flash:
+
+```powershell
+.\software\usb_sniffer.exe --fpga-sram .\bin\usb_sniffer_impl.bit
+```
+
+The open-source flow currently produces an SRAM BIT image, not the JED image
+accepted by this project's permanent flash programmer. Power cycling restores
+the image already stored in FPGA flash. A permanent update still requires a
+Diamond-generated JED file.
 
 
