@@ -340,10 +340,14 @@ static bool handle_vendor_request(void)
 
     if (0 == wValueL || 0 != wValueH || 0 != wIndexL || 0 != wIndexH || 0 != wLengthH || wLengthL != size)
       usb_control_stall();
-    else if (usb_control_recv() != size)
-      usb_control_stall();
     else
+    {
+      // EP0BCL is not a reliable received-length indication for a full
+      // 64-byte OUT data stage on FX2LP. The SETUP length is validated above,
+      // and the control endpoint only completes after that data stage arrives.
+      usb_control_recv();
       jtag_transfer(wValueL);
+    }
 
     return true;
   }
