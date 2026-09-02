@@ -1,20 +1,19 @@
-# Low-cost USB Sniffer (LS/FS/HS) with Wireshark interface
+# Low-Cost USB Sniffer (LS/FS/HS) with Wireshark Interface
 
-This sniffer can be used standalone from a command line or as a plugin for
-[Wireshark](https://www.wireshark.org/) with direct control from the UI.
-
-Either way, the capture is saved in a standard [PcapNG](https://pcapng.com/) format.
+This sniffer can be used as a standalone command-line tool or as a plugin for
+[Wireshark](https://www.wireshark.org/) with direct control from the UI. In both
+cases, captures are saved in the standard [PcapNG](https://pcapng.com/) format.
 
 ![Wireshark UI](doc/wireshark.png)
 
-Here are some example capture files:
+Example capture files:
 
- * [Mouse (Low-Speed)](doc/usb_ls_mouse.pcapng)
- * [Virtual COM-Port Adapter (Full-Speed)](doc/usb_fs_vcp.pcapng)
- * [USB Flash Drive (High-Speed)](doc/usb_hs_flash_drive.pcapng)
+- [Mouse (Low-Speed)](doc/usb_ls_mouse.pcapng)
+- [Virtual COM-Port Adapter (Full-Speed)](doc/usb_fs_vcp.pcapng)
+- [USB Flash Drive (High-Speed)](doc/usb_hs_flash_drive.pcapng)
 
-Note: You will need a recent version of Wireshark (v4.x.x). Older versions may
-not be able to decode USB payload, but should still show the raw data.
+> **Note:** A recent version of Wireshark (v4.x.x) is required. Older versions
+> may not be able to decode USB payloads, but should still show the raw data.
 
 ## Hardware
 
@@ -23,14 +22,14 @@ Microchip USB3343 USB PHY.
 
 Prices and availability of ICs vary, but the total BOM should be less than $50.
 
-LCMXO2-2000HC speed grades 5 and 6 were tested and the provided JED file was built
-for the speed grade 5, so it should work for both. Speed grade 4 is too slow and
-does not meet timing requirements.
+LCMXO2-2000HC speed grades 5 and 6 were tested. The provided JED file was built
+for speed grade 5, so it should work for both. Speed grade 4 is too slow and does
+not meet timing requirements.
 
-Caution: Do not buy CY7C68013A from eBay or AliExpress, they all are either fake
-or sketchy in some way. This IC can be quite expensive from regular suppliers,
-but [LCSC](https://www.lcsc.com/) is a legitimate supplier and they often have
-it at much cheaper prices.
+> **Caution:** Do not buy CY7C68013A from eBay or AliExpress; they are either fake
+> or otherwise questionable. This IC can be quite expensive from regular
+> suppliers, but [LCSC](https://www.lcsc.com/) is a legitimate supplier and often
+> has it at much lower prices.
 
 PCBs can be ordered from [OSH Park](https://oshpark.com/shared_projects/avWPFMNs)
 or any other PCB manufacturer, [gerber files](bin/usb-sniffer-gerbers.zip) are provided.
@@ -39,39 +38,42 @@ There are also STL files for the case.
 
 ![Bare PCB](doc/pcb.jpg) ![3D Printed Case](doc/case.jpg)
 
-## Hardware bring up
+## Hardware Bring-Up
 
-This hardware does not require external programmers, both MCU and FPGA are programmed
-using a USB interface.
+This hardware does not require external programmers. Both the MCU and FPGA are
+programmed using a USB interface.
 
 When a board with a blank EEPROM is connected, it would enumerate as an unconfigured
 FX2LP device.
 
-Note: on Windows blank FX2LP will enumerate as an unknown USB device. Use supplied
-dummy [INF file](bin/blank_fx2lp.inf) as a driver. It will associate blank FX2LP device
-with a generic WinUSB driver, so it would be recognized by the tools. Once the firmware
-runs, it would supply necessary descripptors automatically.
+> **Windows:** A blank FX2LP will enumerate as an unknown USB device. Use the
+> supplied dummy [INF file](bin/blank_fx2lp.inf) as a driver. It associates the
+> blank FX2LP device with a generic WinUSB driver so that it is recognized by the
+> tools. Once the firmware runs, it supplies the necessary descriptors automatically.
 
-Note: on Linux copy [90-usb-sniffer.rules](bin/90-usb-sniffer.rules) to /etc/udev/rules.d
-to set the permissions to access the device under a regular user.
+> **Linux:** Copy [90-usb-sniffer.rules](bin/90-usb-sniffer.rules) to
+> `/etc/udev/rules.d` to allow a regular user to access the device.
 
 The first step is to load the firmware into the MCU SRAM:
-```
+
+```console
 ./usb_sniffer --mcu-sram usb_sniffer.bin
 ```
 
-The device would reset and enumerate as a USB Sniffer with a dummy serial number. After that,
-program the EEPROM:
-```
+The device will reset and enumerate as a USB Sniffer with a dummy serial number.
+After that, program the EEPROM:
+
+```console
 ./usb_sniffer --mcu-eeprom usb_sniffer.bin
 ```
 
-After resetting or power cycling, the device would enumerate as a USB Sniffer with a
-real serial number. The serial number is derived from the FPGA unique identifier,
-so if this step succeeds, it means that FPGA is also functional.
+After resetting or power cycling, the device will enumerate as a USB Sniffer with
+a real serial number. The serial number is derived from the FPGA unique identifier,
+so if this step succeeds, the FPGA is also functional.
 
-After that program the FPGA flash:
-```
+Then program the FPGA flash:
+
+```console
 ./usb_sniffer --fpga-flash usb_sniffer_impl.jed
 ```
 
@@ -84,9 +86,11 @@ firmware to recover it to the working state.
 
 The functionality and performance of the MCU and FPGA connection can be tested using
 the following command:
-```
+
+```console
 ./usb_sniffer --test
 ```
+
 You should be getting 40-50 MB/s. If the speed is significantly slower, connect the
 sniffer directly into the root USB port without intermediate hubs.
 
@@ -103,11 +107,11 @@ locations are `~/.local/lib/wireshark/extcap` on Linux, and
 `C:/Users/<user>/AppData/Roaming/Wireshark/extcap/` on Windows. The exact location is
 provided in the `Help -> About Wireshark -> Folders -> Personal Extcap path`.
 
-For Linux, make sure that the binary file has an executable attribute set.
+On Linux, make sure that the binary file has its executable attribute set.
 
 ## Usage
 
-After installation, refresh the list of interfaces in Wireshark and you should see
+After installation, refresh the list of interfaces in Wireshark. You should see
 "USB Sniffer" as one of the interfaces:
 
 ![Wireshark UI](doc/interfaces.png)
@@ -123,9 +127,10 @@ the FPGA detects Low-, Full- or High-Speed signaling and the extcap program writ
 each packet to a speed-specific PCAPNG interface. Manual speed selection remains
 available for malformed devices or captures that begin after High-Speed negotiation.
 
-After interface is configured, start and stop the capture as with any other interface.
+After the interface is configured, start and stop the capture as with any other
+interface.
 
-## Windows build and test
+## Windows Build and Test
 
 The Windows host utility requires MinGW-w64 GCC, pkg-config and libusb. The FX2LP
 firmware requires SDCC. This repository's Windows regression script expects the
@@ -161,7 +166,7 @@ Create the Windows Wireshark extcap installer after building the host executable
 
 The installer is written to `dist\USB-Sniffer-Wireshark-Plugin-Setup.exe`.
 
-## FPGA build without a Lattice account
+## FPGA Build Without a Lattice Account
 
 The FPGA can be built with Yosys, Project Trellis and nextpnr. The regular OSS
 CAD Suite binary omits the MachXO2-2000 chip database, so first build the small
@@ -188,5 +193,4 @@ The open-source flow currently produces an SRAM BIT image, not the JED image
 accepted by this project's permanent flash programmer. Power cycling restores
 the image already stored in FPGA flash. A permanent update still requires a
 Diamond-generated JED file.
-
 
