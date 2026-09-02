@@ -4,6 +4,15 @@ This sniffer can be used as a standalone command-line tool or as a plugin for
 [Wireshark](https://www.wireshark.org/) with direct control from the UI. In both
 cases, captures are saved in the standard [PcapNG](https://pcapng.com/) format.
 
+> [!WARNING]
+> **High-Speed support does not mean lossless capture at full bus load.** This
+> board can detect, decode and record High-Speed USB traffic, and it works well
+> for enumeration, control transfers and moderate traffic. Its 8 KiB FPGA
+> output FIFO and approximately 44.3-44.5 MB/s FX2-to-PC path are not sufficient
+> to guarantee a lossless capture of a sustained, near-saturated High-Speed bulk
+> transfer. Use a commercial analyzer with substantially more capture memory
+> when every packet of a high-bandwidth transfer must be retained.
+
 ![Wireshark UI](doc/wireshark.png)
 
 Example capture files:
@@ -94,7 +103,9 @@ the following command:
 You should be getting 40-50 MB/s. If the speed is significantly slower, connect the
 sniffer directly into the root USB port without intermediate hubs.
 
-It is a good idea to run this test after significant changes to the hardware setup.
+This test measures only the FPGA-to-FX2-to-PC transport. It does not prove that
+the board can capture a saturated target USB bus without loss. It is a good idea
+to run this test after significant changes to the hardware setup.
 
 ## Installation
 
@@ -129,6 +140,56 @@ available for malformed devices or captures that begin after High-Speed negotiat
 
 After the interface is configured, start and stop the capture as with any other
 interface.
+
+## Project Improvements and Verified Results
+
+The current fork includes a detailed review of the Windows host utility, FX2LP
+firmware and FPGA RTL. The complete engineering notes are in
+[REVIEW.md](REVIEW.md). The main changes are:
+
+- rebuilt the Windows 11 host utility and Wireshark extcap installer;
+- corrected FX2 endpoint lookup, USB reset/configuration handling, EP0 request
+  validation and EP2 FIFO initialization;
+- added short-transfer and file-I/O error handling to the host utility;
+- fixed folded-frame timestamp ordering and bounded formatted messages;
+- added automatic Low-/Full-/High-Speed detection to the CLI and Wireshark UI;
+- made automatic speed detection recover from transient line states and detect
+  the High-Speed chirp after initial Full-Speed classification;
+- buffered back-to-back ULPI receive events so the minimum High-Speed response
+  gap does not discard the next packet while the previous header is written;
+- corrected formatted-FIFO accounting during simultaneous FPGA commits and FX2
+  reads;
+- increased the FX2 slave-FIFO clock to 48 MHz and introduced compact
+  three-byte timestamp headers;
+- folded empty SOF and IN/NAK traffic in the FPGA, aggregating up to 16 events
+  into one summary record;
+- added regression simulations for speed detection, trigger filtering,
+  minimum-gap traffic, sustained bursts, FIFO behavior and folded traffic.
+
+The current permanent MachXO2 JED image passes Lattice Diamond static timing
+analysis at 60 MHz with zero timing errors. It was programmed into the FPGA
+flash and verified after a full power cycle. Measured results on the tested
+Windows 11 system are:
+
+- FPGA-to-FX2-to-PC transport: approximately 44.3-44.5 MB/s;
+- 200-packet High-Speed smoke capture after a cold start: zero CRC, overflow,
+  desynchronization or invalid-packet messages;
+- FPGA folding summaries contained 16 SOF/IN-NAK events instead of emitting one
+  record per empty event;
+- sustained 68 MB-class file-copy capture: 453,556 total records, including
+  423,860 USB packets and 70,434,991 captured DATA bytes;
+- CRC5 errors: 0; CRC16 errors: 0;
+- formatted-output FIFO overflow reports: 9,355, accompanied by 2,791 invalid
+  PID-sequence warnings caused by missing records.
+
+The last result is the important limitation: packets that were captured are
+electrically clean, but the board cannot always drain formatted records fast
+enough during a sustained High-Speed bulk copy. Overflow counts vary with the
+USB port, host controller, hub topology and workload, so the figures above are
+measurements rather than a guaranteed loss rate. Connecting the sniffer and the
+target device to independent USB root controllers may help, but does not remove
+the hardware limit. A fully lossless design needs more aggressive transaction
+compression in the FPGA or substantially more external capture memory.
 
 ## Windows Build and Test
 
