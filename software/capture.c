@@ -49,6 +49,12 @@
 #define PID_SOF                        0xa5
 #define PID_IN                         0x69
 #define PID_NAK                        0x5a
+#define PID_ACK                        0xd2
+#define PID_NYET                       0x96
+#define PID_SPLIT                      0x78
+
+// Byte 1 in SPLIT tokens
+#define SPLIT_COMPLETE                 0x80
 
 #define FOLD_LIMIT_LS_FS               1000
 #define FOLD_LIMIT_HS                  8000
@@ -561,6 +567,24 @@ static void keepalive_event(u64 ts, int delta)
 }
 
 //-----------------------------------------------------------------------------
+static bool is_start_split_ack(void)
+{
+  if (capture_fold_buf_ptr < 2)
+    return false;
+
+  if (capture_fold_buf[capture_fold_buf_ptr-2].data[0] != PID_SPLIT)
+    return false;
+
+  if ((capture_fold_buf[capture_fold_buf_ptr-2].data[1] & SPLIT_COMPLETE) != 0)
+    return false;
+
+  if (capture_fold_buf[capture_fold_buf_ptr-1].data[0] != PID_IN)
+    return false;
+
+  return true;
+}
+
+//-----------------------------------------------------------------------------
 static void data_event(void)
 {
   bool data_error = capture_crc_error || capture_data_error;
@@ -587,7 +611,8 @@ static void data_event(void)
   }
   else if (capture_fold_buf_ptr)
   {
-    if (PID_IN == pid || PID_NAK == pid)
+    if (PID_IN == pid || PID_NAK == pid || PID_NYET == pid || PID_SPLIT == pid ||
+        (PID_ACK == pid && is_start_split_ack()))
     {
       fold_packet(capture_ts, capture_data, capture_size);
     }
